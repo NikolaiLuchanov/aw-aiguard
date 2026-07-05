@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aw-aiguard Architecture Workflow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'neutral',
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+        });
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>aw-aiguard: High-Level Architecture Workflow</h1>
+    <div class="container">
+        <div class="mermaid">
+flowchart TD
+    %% Entry Points
+    subgraph Clients [Developer Workstation]
+        C1[Claude Code / Codex]
+        C2[Claude Cowork]
+        C3[Hermes Agent]
+    end
+
+    %% The Local Proxy Gateway
+    subgraph Proxy [Guardrail Proxy Gateway @ localhost:9020]
+        direction TB
+        
+        %% Pre-Flight Layer
+        subgraph PreFlight [Layer 1: Pre-Flight Guardrails]
+            P1[PII & Secrets Scanning] -- Async Redaction --> P2
+            P2{Guardian Fast Mode<br/>--think=false}
+            P3{Function-Call<br/>Hallucination Check}
+            P4[JSON Schema Validation<br/>CaMeL Separation]
+        end
+
+        %% Decision Logic
+        Decision{Guardian<br/>Score == NO?}
+        
+        %% HITL Layer
+        subgraph HITL [Layer 2: Human-in-the-Loop]
+            H1{Irreversible<br/>Action?}
+            H2[Pause for Human<br/>Approval UI]
+        end
+
+        %% Execution
+        Exec[Forward to Cloud API / Local Tool]
+    end
+
+    %% Post-Execution Layer
+    subgraph PostFlight [Layer 3: Post-Processing]
+        direction TB
+        PF1{Guardian Think Mode<br/>--think=true}
+        PF2[Output Control LLM05<br/>Escaping & Quoting]
+    end
+
+    %% Backend & Observability
+    subgraph Backend [Central Audit & Alerting]
+        DB[(PostgreSQL Hot Tier)]
+        S3[(S3 Cold Archive)]
+        Alert[Alert Engine<br/>Slack / Telegram / Email]
+    end
+
+    %% Workflow Connections
+    Clients ==> Proxy
+    
+    %% Pre-flight sequence
+    P1 --> P2 --> P3 --> P4 --> Decision
+    
+    %% Block path
+    Decision -- Yes --> Alert
+    Decision -- Yes --> Block[Block Response]
+    
+    %% Pass path
+    Decision -- No --> H1
+    H1 -- No --> Exec
+    H1 -- Yes --> H2
+    H2 -- Approved --> Exec
+    H2 -- Denied --> Block
+    
+    %% After execution
+    Exec --> PF1 --> PF2 --> Clients
+    
+    %% Async Audit path
+    Proxy -.->|Async Log + Provenance| DB
+    DB -.->|Periodic Export| S3
+    PF1 -- "BYOC Violation" --> Alert
+
+    %% Styling
+    style Decision fill:#f96,stroke:#333,stroke-width:2px
+    style H2 fill:#fff4dd,stroke:#d4a017,stroke-width:2px
+    style Block fill:#ffcccc,stroke:#cc0000
+    style Alert fill:#ffeb3b,stroke:#fbc02d
+        </div>
+    </div>
+</body>
+</html>

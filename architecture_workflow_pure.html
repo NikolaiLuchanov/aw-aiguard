@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aw-aiguard Architecture Workflow (Pure)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            width: 100%;
+            overflow: auto;
+        }
+        .node rect, .node polygon, .node circle {
+            stroke-width: 2;
+            stroke: #333;
+        }
+        .label {
+            font-size: 12px;
+            text-anchor: middle;
+            font-weight: 500;
+            fill: #333;
+            pointer-events: none;
+        }
+        .edge {
+            fill: none;
+            stroke: #666;
+            stroke-width: 2;
+            marker-end: url(#arrowhead);
+        }
+        .edge-dashed {
+            stroke-dasharray: 5,5;
+        }
+        .group-bg {
+            fill: #f1f3f5;
+            stroke: #dee2e6;
+            stroke-width: 1;
+            stroke-dasharray: 4;
+        }
+        .group-label {
+            font-size: 14px;
+            font-weight: bold;
+            fill: #868e96;
+            text-anchor: start;
+        }
+    </style>
+</head>
+<body>
+    <h1>aw-aiguard: High-Level Architecture Workflow</h1>
+    <div class="container">
+        <svg width="1200" height="600" viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+                </marker>
+            </defs>
+
+            <!-- GROUP: Clients -->
+            <rect x="20" y="100" width="160" height="200" rx="10" class="group-bg" />
+            <text x="30" y="90" class="group-label">Developer Workstation</text>
+            
+            <g class="node" transform="translate(40, 140)">
+                <rect width="120" height="40" rx="5" fill="#fff" />
+                <text x="60" y="25" class="label">Claude Code / Codex</text>
+            </g>
+            <g class="node" transform="translate(40, 190)">
+                <rect width="120" height="40" rx="5" fill="#fff" />
+                <text x="60" y="25" class="label">Claude Cowork</text>
+            </g>
+            <g class="node" transform="translate(40, 240)">
+                <rect width="120" height="40" rx="5" fill="#fff" />
+                <text x="60" y="25" class="label">Hermes Agent</text>
+            </g>
+
+            <!-- GROUP: Proxy Gateway -->
+            <rect x="220" y="50" width="550" height="300" rx="10" class="group-bg" />
+            <text x="230" y="40" class="group-label">Guardrail Proxy Gateway @ localhost:9020</text>
+
+            <!-- Pre-Flight Layer -->
+            <g class="node" transform="translate(250, 80)">
+                <rect width="140" height="40" rx="5" fill="#fff" />
+                <text x="70" y="25" class="label">PII & Secrets Scan</text>
+            </g>
+            <g class="node" transform="translate(250, 140)">
+                <rect width="140" height="40" rx="5" fill="#fff" />
+                <text x="70" y="25" class="label">Guardian (Fast)</text>
+            </g>
+            <g class="node" transform="translate(250, 200)">
+                <rect width="140" height="40" rx="5" fill="#fff" />
+                <text x="70" y="25" class="label">Hallucination Check</text>
+            </g>
+            <g class="node" transform="translate(250, 260)">
+                <rect width="140" height="40" rx="5" fill="#fff" />
+                <text x="70" y="25" class="label">CaMeL / Schema Val</text>
+            </g>
+
+            <!-- Decision Diamond -->
+            <g class="node" transform="translate(420, 150)">
+                <polygon points="0,40 50,0 100,40 50,80" fill="#f96" />
+                <text x="50" y="45" class="label">Score==NO?</text>
+            </g>
+
+            <!-- HITL Layer -->
+            <g class="node" transform="translate(550, 140)">
+                <rect width="140" height="40" rx="5" fill="#fff4dd" />
+                <text x="70" y="25" class="label">Irreversible Action?</text>
+            </g>
+            <g class="node" transform="translate(550, 210)">
+                <rect width="140" height="40" rx="5" fill="#fff4dd" />
+                <text x="70" y="25" class="label">Human Approval UI</text>
+            </g>
+
+            <!-- Execution -->
+            <g class="node" transform="translate(720, 140)">
+                <rect width="180" height="40" rx="5" fill="#fff" />
+                <text x="90" y="25" class="label">Forward to Cloud/Tool</text>
+            </g>
+
+            <!-- GROUP: Post-Processing -->
+            <rect x="930" y="100" width="220" height="200" rx="10" class="group-bg" />
+            <text x="940" y="90" class="group-label">Post-Processing</text>
+            
+            <g class="node" transform="translate(950, 130)">
+                <rect width="180" height="40" rx="5" fill="#fff" />
+                <text x="90" y="25" class="label">Guardian (Think)</text>
+            </g>
+            <g class="node" transform="translate(950, 190)">
+                <rect width="180" height="40" rx="5" fill="#fff" />
+                <text x="90" y="25" class="label">Output Control LLM05</text>
+            </g>
+
+            <!-- GROUP: Backend -->
+            <rect x="400" y="400" width="350" height="150" rx="10" class="group-bg" />
+            <text x="410" y="390" class="group-label">Central Audit & Alerting</text>
+            
+            <g class="node" transform="translate(430, 440)">
+                <rect width="120" height="40" rx="5" fill="#fff" />
+                <text x="60" y="25" class="label">Postgres Hot Tier</text>
+            </g>
+            <g class="node" transform="translate(580, 440)">
+                <rect width="120" height="40" rx="5" fill="#fff" />
+                <text x="60" y="25" class="label">S3 Cold Archive</text>
+            </g>
+            <g class="node" transform="translate(580, 490)">
+                <rect width="140" height="40" rx="5" fill="#ffeb3b" />
+                <text x="70" y="25" class="label">Alert Engine</text>
+            </g>
+
+            <!-- Block Node -->
+            <g class="node" transform="translate(420, 260)">
+                <rect width="100" height="40" rx="5" fill="#ffcccc" />
+                <text x="50" y="25" class="label">BLOCK Response</text>
+            </g>
+
+            <!-- EDGES: Clients to Proxy -->
+            <path d="M160,160 L250,100" class="edge" />
+            <path d="M160,210 L250,160" class="edge" />
+            <path d="M160,260 L250,220" class="edge" />
+
+            <!-- EDGES: Pre-flight sequence -->
+            <path d="M390,100 L390,140 L320,140" class="edge" /> <!-- P1 to P2 (loop) -->
+            <path d="M390,120 L390,140" class="edge" />
+            <path d="M390,180 L390,200" class="edge" />
+            <path d="M390,240 L390,260" class="edge" />
+            <path d="M390,280 L420,200" class="edge" />
+
+            <!-- Decision paths -->
+            <path d="M470,180 L550,160" class="edge" /> <!-- No -> HITL -->
+            <path d="M470,200 L470,260" class="edge" /> <!-- Yes -> Block -->
+            <text x="500" y="160" class="label" style="text-anchor:start">No</text>
+            <text x="475" y="230" class="label" style="text-anchor:start">Yes</text>
+
+            <!-- HITL paths -->
+            <path d="M690,160 L720,160" class="edge" /> <!-- Approved -> Exec -->
+            <path d="M620,180 L620,210" class="edge" /> <!-- Yes -> Approval UI -->
+            <path d="M620,250 L520,280" class="edge" /> <!-- Denied -> Block -->
+            <text x="700" y="150" class="label" style="text-anchor:start">Pass</text>
+            
+            <!-- Execution to Post-flight -->
+            <path d="M900,160 L950,150" class="edge" />
+            <path d="M1040,170 L1040,190" class="edge" />
+            <path d="M1130,210 Q1200,210 1200,150" class="edge" /> <!-- Loop back simplified as edge to right -->
+            <path d="M1130,210 L1150,210 L1150,150 L180,150" class="edge" style="stroke:#aaa" />
+
+            <!-- Async Audit path -->
+            <path d="M490,350 L490,440" class="edge edge-dashed" />
+            <path d="M550,460 L580,460" class="edge" />
+            
+            <!-- Alert paths -->
+            <path d="M470,260 L580,490" class="edge edge-dashed" />
+            <path d="M1040,150 L1040,500 L720,500" class="edge edge-dashed" />
+
+        </svg>
+    </div>
+</body>
+</html>
