@@ -1,0 +1,6 @@
+# Local Guardrail Settings
+guardian_threshold: 0.85
+llm_safety_mode: hard_block
+secrets_block_mode: hard_block
+alert_channels: ["telegram"]
+audit_ttl_days: 30

@@ -93,7 +93,12 @@
 
 ---
 
-## 🛠️ Technical Summary
+## 🛠️ Technical Summary & Internal Communication
+**Internal Flow:** `Client` $\rightarrow$ `Gateway Proxy (9020)` $\rightarrow$ `Central Service (8000/Cloud)` $\rightarrow$ `LLM Cloud API`.
+
+**Dev $\rightarrow$ Prod Transition:**
+The Gateway Proxy is designed to be stateless. The switch from local development to cloud production is handled exclusively via the `GUARD_BACKEND_URL` environment variable. In Phase 2, the transition occurs when this URL is updated from `localhost:8000` to the deployed cloud endpoint, shifting the audit and configuration load from the local machine to the cloud infrastructure.
+
 | Component | Technology | Role |
 | :--- | :--- | :--- |
 | **Gateway Proxy** | Python / FastAPI | Interception, Guardian Scoring, PII Scanning, HITL Pause, LLM05 Control |

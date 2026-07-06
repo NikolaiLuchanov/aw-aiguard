@@ -1,0 +1,6 @@
+# BYOC (Bring Your Own Criteria) Stop-Limits
+# These are hard boundaries that no model decision can override.
+
+never_delete: true
+never_exfiltrate: true
+irreversible_requires_hitl: true
