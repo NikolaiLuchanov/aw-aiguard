@@ -113,9 +113,10 @@ flowchart TD
     end
 
     %% Workflow Connections
+    Provenance ==> Clients
     Clients ==> Proxy
-    Proxy ==> ProvT
-    ProvT -.-> Conf
+    Conf -.-> Proxy
+    Conf -.-> Provenance
     
     %% Pre-flight sequence
     P1 --> P2
@@ -132,7 +133,9 @@ flowchart TD
     Decision -- Yes --> Block[Block Response]
     
     %% Pass path
-    Decision -- No --> H1
+    Decision -- No --> BYOC{"BYOC Stop-Limits<br/>(Hard Boundary)"}
+    BYOC -- Violation --> Block
+    BYOC -- Pass --> H1
     H1 -- No --> Exec
     H1 -- Yes --> H2
     H2 -- Approved --> Exec
@@ -152,7 +155,7 @@ flowchart TD
     style Block fill:#ffebee,stroke:#c62828,stroke-width:2px
     style Alert fill:#fffde7,stroke:#fbc02d,stroke-width:2px
     style Proxy fill:#f8fafc,stroke:#64748b,stroke-width:2px
-    style Backend fill:#f1f5f9,stroke:#475569,stroke-width:2px
+    style Backend fill:#f1f5f9,stroke:#47569,stroke-width:2px
     style PostFlight fill:#f8fafc,stroke:#64748b,stroke-width:2px
         </div>
     </div>
