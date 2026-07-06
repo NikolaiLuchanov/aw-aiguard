@@ -105,14 +105,14 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 Based on the architecture-design1.md v1.1 alignment:
 
 ### Pre-MVP Priority Tasks (Phase 1 Sprints)
-| Priority | Task | Status |
-|---|---|---|
-| **P0** | Core proxy at `localhost:9020` with Guardian pre-flight gate | Must be first |
-| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | Must complete before production |
-| P1 | Provenance tagging schema + enforcement pipeline | Needed for trust-gated operations |
-| P1 | Post-processing thinking-mode verification layer | Apply selectively to high-risk outputs |
-| P2 | BYOC stop-limits engine (codified "never do this" rules) | Final safety boundary |
-| P2 | Data/command separation validation schemas | Structural enforcement at tool-call level |
+|| Priority | Task | Status |
+||---|---|---|---|
+|| **P0** | Core native proxy at `localhost:9020` with cloud-based Guardian pre-flight gate | Must be first |
+|| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | Must complete before production |
+|| P1 | Provenance tagging schema + enforcement pipeline | Needed for trust-gated operations |
+|| P1 | Post-processing thinking-mode verification layer (cloud-side) | Apply selectively to high-risk outputs |
+|| P2 | BYOC stop-limits engine (codified "never do this" rules) | Final safety boundary |
+|| P2 | Data/command separation validation schemas | Structural enforcement at tool-call level |
 
 ### Key Design Decisions Aligned with Architecture
 1. **HITL is the bottleneck you *want*:** The architecture places HITL middleware between pre-flight Guardian and actual tool execution. This intentional friction is by design — slow security > fast catastrophe.

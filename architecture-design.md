@@ -305,15 +305,13 @@ To move from architecture to implementation:
 1. **Cowork Bridge:** We intercept Cowork by configuring Claude Desktop's `claude_desktop_config.json` (or similar environment variable) to route its internal model calls straight through `localhost:9020`. This acts as a pure file-based HTTP proxy without needing to write reverse-engineering glue code to watch directory JSON dumps.
 2. **Guardrail Confidence Thresholds:** Fully settings-driven per the table in Section 9 (e.g., changing `llm_safety_mode` from `hard_block` to `warn_only`). 
 3. **Runtime Architecture (Local Proxy vs Central Backend):** 
-
-### Local Guardian Gateway (The Critical Path)
-- **What it does:** Real-time JSON interception, local Granite4.1 Guardian scoring (`yes/no` decision), and immediate blocking/pass-through of prompts before Claude Code or Codex ever sees them.
-- **Best Runtime:** **Native Process.**
-- On macOS, Docker containers run inside a lightweight Linux VM (HyperKit). This adds ~10–15% latency / 20MB+ RAM overhead strictly for virtualization and network translation between the host OS and the container's port `9020`.
-- For single HTTP proxy running on one machine, a native process (e.g., Python `uvicorn` or Node/Express natively bound to `0.0.0.0:9020`) has near-zero startup time (<0.1s) and minimal memory (~40MB). Adding Docker would fight for the exact same RAM/CPU that Ollama needs to run `granite4.1-guardian` efficiently.
-
-### Central Backend (The Audit Log Path)
-- **What it does:** Accept slow, asynchronous audit log pushes from every dev's proxy and distribute daily configuration updates (`settings.yaml`). Does not block live traffic.
+### 307. Runtime Architecture (Native Proxy $\leftrightarrow$ Cloud Backend)
+- **Local Gateway (The Performance Edge):**
+    - **What it does:** Real-time JSON interception, remote Granite 4.1 Guardian scoring, and immediate blocking/pass-through.
+    - **Best Runtime:** **Native Process (Python/FastAPI).** This avoids Docker virtualization overhead on macOS, ensuring the lowest possible latency for the interception point.
+- **Cloud Backend (The Resource-Heavy Core):**
+    - **What it does:** Hosts the GPU-accelerated model server (Granite 4.1), the audit database (Postgres), and the management dashboard.
+    - **Best Runtime:** **Cloud-Deployed Containers (K8s/Docker).** This offloads all heavy memory and compute requirements from the local machine to specialized cloud infrastructure.
 - **Best Runtime:** **Docker Compose.** Because the backend runs 3 distinct stateful services together (PostgreSQL for hot storage, MinIO for cold S3 archive, and settings sync API), a single `docker-compose.yml` provides maximum reliability with near-zero ops overhead. Managed services like Render or Railway are excellent for this layer if you want zero local maintenance for Postgres backups and stateful volume mounts. 
 
 ---

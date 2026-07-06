@@ -8,31 +8,45 @@
     <script>
         mermaid.initialize({ 
             startOnLoad: true, 
-            theme: 'neutral',
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#ffffff',
+                primaryTextColor: '#2c3e50',
+                primaryBorderColor: '#a0aec0',
+                lineColor: '#4a5568',
+                secondaryColor: '#f7fafc',
+                tertiaryColor: '#edf2f7'
+            },
             flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
         });
     </script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 40px;
-            background-color: #f8f9fa;
-            color: #333;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            color: #2c3e50;
+            min-height: 100vh;
         }
         h1 {
-            margin-bottom: 20px;
-            color: #2c3e50;
+            margin-bottom: 30px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #1a202c;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .container {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            max-width: 1200px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            max-width: 1400px;
             width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
@@ -46,52 +60,72 @@ flowchart TD
         C1[Claude Code / Codex]
         C2[Claude Cowork]
         C3[Hermes Agent]
+        User([User / AI Agent])
+    end
+
+    %% Provenance Layer
+    subgraph Provenance ["Layer 0: Data Ingestion & Provenance"]
+        direction TB
+        ProvT["Provenance Tagging<br/>source_id, trust_level, ingested_at"]
+        Context["Context Window / RAG Store"]
+        ProvT --> Context
     end
 
     %% The Local Proxy Gateway
-    subgraph Proxy [Guardrail Proxy Gateway @ localhost:9020]
+    subgraph Proxy ["Guardrail Proxy Gateway @ localhost:9020 (Native)"]
         direction TB
         
         %% Pre-Flight Layer
-        subgraph PreFlight [Layer 1: Pre-Flight Guardrails]
-            P1[PII & Secrets Scanning] -- Async Redaction --> P2
-            P2{Guardian Fast Mode<br/>--think=false}
-            P3{Function-Call<br/>Hallucination Check}
-            P4[JSON Schema Validation<br/>CaMeL Separation]
+        subgraph PreFlight ["Layer 1: Pre-Flight Guardrails"]
+            P1["PII & Secrets Scanning"] -- Async Redaction --> P2
+            P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
+            P3{"Function-Call<br/>Hallucination Check"}
+            P4["JSON Schema Validation<br/>CaMeL Separation"]
         end
 
         %% Decision Logic
-        Decision{Guardian<br/>Score == NO?}
+        Decision{"Guardian<br/>Score is NO?"}
         
         %% HITL Layer
-        subgraph HITL [Layer 2: Human-in-the-Loop]
-            H1{Irreversible<br/>Action?}
-            H2[Pause for Human<br/>Approval UI]
+        subgraph HITL ["Layer 2: Human-in-the-Loop"]
+            H1{"Irreversible<br/>Action?"}
+            H2["Pause for Human<br/>Approval UI"]
         end
 
         %% Execution
-        Exec[Forward to Cloud API / Local Tool]
+        Exec["Forward to Cloud API / Local Tool"]
     end
 
     %% Post-Execution Layer
-    subgraph PostFlight [Layer 3: Post-Processing]
+    subgraph PostFlight ["Layer 3: Post-Processing"]
         direction TB
-        PF1{Guardian Think Mode<br/>--think=true}
-        PF2[Output Control LLM05<br/>Escaping & Quoting]
+        PF1{"Guardian Think Mode<br/>think=true"}
+        PF2["Output Control LLM05<br/>Escaping & Quoting"]
     end
 
     %% Backend & Observability
-    subgraph Backend [Central Audit & Alerting]
-        DB[(PostgreSQL Hot Tier)]
-        S3[(S3 Cold Archive)]
-        Alert[Alert Engine<br/>Slack / Telegram / Email]
+    subgraph Backend ["Cloud Backend: Audit & Alerting"]
+        DB[("PostgreSQL Cloud Hot Tier")]
+        S3[("S3 Cloud Cold Archive")]
+        Alert["Alert Engine<br/>Slack / Telegram / Email"]
+        Model["Granite 4.1 Cloud Server"]
+        Conf["Central Config Hub<br/>BYOC & Thresholds"]
     end
 
     %% Workflow Connections
     Clients ==> Proxy
+    Proxy ==> ProvT
+    ProvT -.-> Conf
     
     %% Pre-flight sequence
-    P1 --> P2 --> P3 --> P4 --> Decision
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> Decision
+    
+    %% Model Call Path
+    P2 -.-> Model
+    Model -.-> P2
     
     %% Block path
     Decision -- Yes --> Alert
@@ -113,10 +147,13 @@ flowchart TD
     PF1 -- "BYOC Violation" --> Alert
 
     %% Styling
-    style Decision fill:#f96,stroke:#333,stroke-width:2px
-    style H2 fill:#fff4dd,stroke:#d4a017,stroke-width:2px
-    style Block fill:#ffcccc,stroke:#cc0000
-    style Alert fill:#ffeb3b,stroke:#fbc02d
+    style Decision fill:#fff4e6,stroke:#f96,stroke-width:3px
+    style H2 fill:#fffcf0,stroke:#d4a017,stroke-width:3px
+    style Block fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style Alert fill:#fffde7,stroke:#fbc02d,stroke-width:2px
+    style Proxy fill:#f8fafc,stroke:#64748b,stroke-width:2px
+    style Backend fill:#f1f5f9,stroke:#475569,stroke-width:2px
+    style PostFlight fill:#f8fafc,stroke:#64748b,stroke-width:2px
         </div>
     </div>
 </body>
