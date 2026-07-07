@@ -31,8 +31,8 @@ flowchart LR
         TCD[OpenAI Codex\nTerminal Runtime] ==>|env vars override base url| G
     end
 
-    G -- "Score == YES: Pass-through" --> C1[(Anthropic API\nCloud Endpoint)]
-    G -- "Score == YES: Pass-through" --> C2[(OpenAI API\nCloud Endpoint)]
+    G <== "Score == YES: Pass-through" ==> C1[(Anthropic API\nCloud Endpoint)]
+    G <== "Score == YES: Pass-through" ==> C2[(OpenAI API\nCloud Endpoint)]
     
     G -- "Score == NO: BLOCK local response" --> Z(Safe Block Response)
 
@@ -212,7 +212,7 @@ If Agent A delegates to Agent B which delegates to Agent C, each hop creates a n
 | Agent Autonomy Level | Example Capabilities | Cost of Successful Injection | Your Guardrail Depth Required |
 |---|---|---|---|
 | **Read-only** | Fetch pages, read repos, summarize content | Information disclosure only (data exfiltration) | Guardian pre-flight + provenance tagging + HITL for any outbound |
-**Write-restricted** | Add code to non-prod branches, delete temp files | Structural damage but limited blast radius | Pre-flight guardian + LLM output validation (LLM05 section) + HITL gate |
+| **Write-restricted** | Add code to non-prod branches, delete temp files | Structural damage but limited blast radius | Pre-flight guardian + LLM output validation (LLM05 section) + HITL gate |
 | **Full agency** | Deploy to prod, send emails externally, delete prod data | Catastrophic — all lethal trifecta vertices activate | Pre-flight + post-response + BYOC stop-limits + HITL for *every* write + PII scanning + sandboxing |
 
 **Actionable guidance:** Segment agents by autonomy level. A read-only code-review agent should lose no more than read permissions if compromised. This is why your BYOC rules, HITL gates, and least-privilege scoping are critical: they *reduce* the agent's effective autonomy without removing useful functionality.
@@ -248,9 +248,9 @@ This layer runs *in parallel* with the Guardian safety gate on **every outbound 
 - **Solid Background Thread Pool:** Scanning runs on dedicated background worker threads managed by a bounded FIFO queue. If the thread pool is saturated under heavy load, requests are queued (never dropped). A watchdog thread monitors queue depth and spawns additional workers if latency exceeds 50ms. This ensures zero data loss and predictable throughput even at scale.
 - **Scan Pipeline:**   
      1. Extract raw JSON body & HTTP headers from the incoming tool call.  
-   2. Run lightweight pattern-matchers (regex + entropy) against every string field in background threads.  
-3. If a match exceeds a confidence threshold, **redact** it in-place (`***REDACTED_API_KEY***`) and push a `WARN` flag to the audit log asynchronously (does not block the LLM call).   
- 4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 1) for an LLM-based secondary check on sensitive content.
+     2. Run lightweight pattern-matchers (regex + entropy) against every string field in background threads.  
+     3. If a match exceeds a confidence threshold, **redact** it in-place (`***REDACTED_API_KEY***`) and push a `WARN` flag to the audit log asynchronously (does not block the LLM call).   
+     4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 1) for an LLM-based secondary check on sensitive content.
 - **Alerts & Audits:** Any `WARN` flags from PII/Secrets scanning are tagged in the audit table (`audit_tags = pii_detected`, `audit_tags = secret_exposure`). If your alerting channels (Slack, Telegram) support severity levels, these fire as "Warning" alerts rather than hard "Block" alerts — allowing developers to review what was auto-redacted without blocking their work.
 - **Configurability:** You provide an allowlist of safe patterns (e.g., `"example.com"`, `"test-key-*"`) and the proxy skips redaction for those. All other traffic is scanned with aggressive defaults. This is controlled locally by `~/.config/aw-aiguard/scan_rules.yaml` — see Section 10 for synchronization details.
 
@@ -263,7 +263,7 @@ This layer runs *in parallel* with the Guardian safety gate on **every outbound 
 | **Hermes Agent** | Every tool invocation argument (`browser_navigate` URLs, `curl` payload bodies, file reads). | Block if credentials present; warn/redact for PII. Store audit logs. |
 
 #### Future Extensibility
-- Can be later swapped for a local dedicated model (e.g., a small LLM fine-tuned on NER — Named Entity Recognition) if you need higher accuracy across multilingual or obfuscated secrets.     
+- Can be later swapped for a local dedicated model (e.g., a small LLM fine-tuned on NER — Named Entity Recognition) if you need higher accuracy across multilingual or obfuscified secrets.     
 - Supports custom YAML rules (`scan_rules.yaml`) to add your own regex patterns without code changes, making it developer-friendly and instantly configurable by ops teams.
 
 ---
@@ -279,7 +279,7 @@ Each developer has a `~/.config/aw-aiguard/settings.yaml` file. The backend push
 |---|---|---|---|---|
 | **Guardian Confidence Threshold** | `guardian_threashold: 0.85` | Daily + Immediate on change | `0.85` | Score (`yes`/`no`) boundary for block vs warn/proceed. |
 | **LLM Safety Mode** | `llm_safety_mode: hard_block` | Daily + Immediate on change | `hard_block` | One of `[hard_block, warn_only, hybrid]`. |
-| **Secrets Block Mode** | `secrets_block_mode: hard_block` | Daily + Immediate on change | `hard_block` | Per-secret-type overrides (AWS keys → block; PII email → warn/redact). |
+| **Secrets Block Mode** | `secrets_block_mode: hard_block` | Daily + Immediate on change | `hard_block` | Per-secret-type overrides (AWS keys $\rightarrow$ block; PII email $\rightarrow$ warn/redact). |
 | **Alert Channels** | `alert_channels: [slack, telegram]` | Weekly + On-demand | `[telegram]` | Which channels receive Guardian alerts per developer. |
 | **Scan Rules YAML** | `scan_rules.yaml` (separate file) | Daily + On-change hot-reload | Aggressive defaults | Allowlisted domains/API key prefixes to ignore. |
 | **Audit Retention TTL** | `audit_ttl_days: 30` | Monthly | `30` | Hot storage retention; cold export is always infinite. |
@@ -346,5 +346,3 @@ aw-aiguard/
 | P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal of untrusted data flowing into sensitive operations |
 | P2 | BYOC stop-limits engine (Section 6C) | Sprint 3 | Codifies "never do this" rules as hard enforcement boundary |
 | P2 | Data/command separation schemas (Section 3.5) | Sprint 3 | Validate all tool-call parameters against typed JSON schema |
-
-We are fully ready for the first coding sprint: building `gateway/main.py` with its Guardian interceptor, HITL middleware gate, and audit worker threads. Shall I begin generating the core proxy code, or do you have adjustments on this phase plan?
