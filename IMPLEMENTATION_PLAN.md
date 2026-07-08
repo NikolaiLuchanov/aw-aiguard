@@ -24,9 +24,10 @@
     - Implement FastAPI server on `localhost:9020`.
     - Build an Anthropic/OpenAI compatible reverse proxy that forwards requests to cloud APIs.
 - [ ] **1.3 Guardian Pre-flight Gate**
-    - Implement `guardrail.py` to interface with the containerized model server.
-    - Logic: `User Input` $\\rightarrow$ `Model Server` $\\rightarrow$ `Score (yes/no)` $\\rightarrow$ `Forward or Block`.
-- [ ] **1.4 PII & Secrets Scanner**
+    - Implement `GuardianGuard` adapter to interface with the containerized model server.
+    - Logic: `User Input` $\rightarrow$ `Model Server` $\rightarrow$ `Score (yes/no)` $\rightarrow$ `Forward or Block`.
+    - Implement 4 Fail-Safe strategies: `block` (Fail-Closed), `allow` (Fail-Open), `warn` (Audit Mode), and `fallback` (Emergency Filter).
+
     - Implement the regex/entropy-based scanning layer.
     - Logic: Redact sensitive patterns in-place before they leave the local machine.
 - [ ] **1.5 HITL "Pause" Middleware (P0 Requirement)**
