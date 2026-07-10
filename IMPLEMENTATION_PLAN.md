@@ -17,6 +17,8 @@
 ### Phase 1: The Critical Edge (P0 Safety)
 *Goal: Establish the interception point and implement immediate, stateless safety. No irreversible action can be taken without the HITL gate.*
 
+**Note on Backend Dependency:** Phase 1.3 implements the *client-side* logic for the Guardian pre-flight gate. The *server-side* implementation (the containerized Central Service) is the primary focus of Phase 2. During Phase 1.3, verification is performed using fail-safe strategies and mock servers to validate the proxy's robustness before the full backend is deployed.
+
 - [ ] **1.1 Project Scaffolding**
     - Initialize directory structure: `gateway/`, `central-service/`, `guardrail-config/`.
     - Set up Python virtual environment and dependency management (`pyproject.toml` or `requirements.txt`).

@@ -1,0 +1,21 @@
+rules:
+  - name: "File Deletion"
+    pattern: "delete_file|rm -rf|unlink"
+    action: "pause"
+    timeout_seconds: 300
+  - name: "Code Commit"
+    pattern: "git commit|git push|git force-push"
+    action: "pause"
+    timeout_seconds: 120
+  - name: "Email Sending"
+    pattern: "send_email|smtp.send"
+    action: "pause"
+    timeout_seconds: 180
+  - name: "Database Modification"
+    pattern: "DROP TABLE|DELETE FROM|TRUNCATE"
+    action: "pause"
+    timeout_seconds: 240
+  - name: "Payment Processing"
+    pattern: "charge_card|process_payment|stripe.charge"
+    action: "pause"
+    timeout_seconds: 300

@@ -111,11 +111,24 @@ Option B is designed to handle both real-time blocking and comprehensive post-ho
 **Goal:** *Block malicious or harmful intent before execution.*  
 Every single payload hits the local guardrail *before* the tool is invoked. If `granite4.1-guardian` scores it as unsafe (`no`), execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
 
-### Layer 2: Post-Hoc Audit & Alert Routing (Async)
-**Goal:** *Comprehensive historical tracking and alert triggers.*  
-Regardless of whether a request was allowed or blocked by the pre-flight gate, **it gets logged.** The proxy maintains an asynchronous worker thread that serializes every interaction payload into JSON, tags it with its Guardian security score, API key ID (who made this call?), and timestamp.
-- This log is pushed to the Postgres backend (`Hot Tier`). 
-- If a `Guardian No` is detected, a parallel async webhook triggers your alerting system (e.g., `"⚠️ GUARDIAN BLOCK: User @dev1 attempted injection on Terminal."`).
+### Layer 2: PII & Secrets Scanning (Integrated in Proxy)
+**Goal:** *Detect and redact sensitive data before it leaves the local machine, preventing accidental exposures.*
+
+#### Scanning Sequence & Flow
+The proxy supports two configurable sequences to balance security and privacy:
+- **Sequence A (Original-First)**: `Raw Prompt` $\rightarrow$ `Guardian Safety Check` $\rightarrow$ `PII Scanner (Redaction)` $\rightarrow$ `Cloud LLM`. (Allows Guardian to detect "Secret Leakage" attacks).
+- **Sequence B (Redacted-First)**: `Raw Prompt` $\rightarrow$ `PII Scanner (Redaction)` $\rightarrow$ `Guardian Safety Check` $\rightarrow$ `Cloud LLM`. (Ensures Guardian never sees the actual secret).
+
+#### Action-Based Rule Engine
+Scanning is driven by `scan_rules.yaml` using the following actions:
+- `redact`: Replace match with a token/mask (e.g., `[SECRET_1]` or `AKIA****1234`).
+- `block`: Stop the request immediately (403 Forbidden).
+- `warn`: Allow request but trigger a high-priority security alert.
+- `ignore`: Explicitly allow a specific pattern (Allowlisting).
+
+#### Directionality Roadmap
+- **Current (v1.4)**: **Outgoing Only**. Scans request bodies and headers before they leave the local machine.
+- **Roadmap (v2.0)**: **Bi-directional**. Extend the pipeline to scan incoming LLM responses for leaked secrets or PII before they reach the user.
 
 **This dual-track approach ensures that:**
 1. Safety happens instantly at the edge (pre-flight). 

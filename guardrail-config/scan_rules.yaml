@@ -1,0 +1,13 @@
+rules:
+  - name: "AWS Access Key"
+    pattern: "AKIA[0-9A-Z]{16}"
+    action: "block"
+    severity: "critical"
+  - name: "Generic Email"
+    pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    action: "redact"
+    severity: "medium"
+  - name: "Private Key"
+    pattern: "-----BEGIN (RSA|OPENSSH) PRIVATE KEY-----"
+    action: "block"
+    severity: "critical"
