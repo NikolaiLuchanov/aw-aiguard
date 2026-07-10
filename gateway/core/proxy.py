@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from gateway.core.guardrail import GuardianGuard, SafetyDecision
 from gateway.core.scanner import PIIScanner
 from gateway.core.hitl import HITLGate, HitlDecision
+from gateway.core.block import generate_block_response, BlockReason
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -116,26 +117,42 @@ class LLMProxy:
                 if self.guardian:
                     safety_decision = await self.guardian.check_safety(prompt)
                     if safety_decision == SafetyDecision.BLOCK:
-                        return self._block_response("Security Blocked: Potential safety violation detected.")
-                
+                        return generate_block_response(
+                            reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="guardian",
+                        )
+
                 if self.scanner:
                     redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
                     if scan_decision == SafetyDecision.BLOCK:
-                        return self._block_response("Security Blocked: Critical secret detected.")
+                        return generate_block_response(
+                            reason=BlockReason.CRITICAL_SECRET_DETECTED,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="pii_scanner",
+                        )
                     current_content = self._update_body_prompt(content, redacted)
             else:
                 # SEQUENCE B: PII -> Guardian
                 if self.scanner:
                     redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
                     if scan_decision == SafetyDecision.BLOCK:
-                        return self._block_response("Security Blocked: Critical secret detected.")
+                        return generate_block_response(
+                            reason=BlockReason.CRITICAL_SECRET_DETECTED,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="pii_scanner",
+                        )
                     prompt = redacted
                     current_content = self._update_body_prompt(content, redacted)
-                
+
                 if self.guardian:
                     safety_decision = await self.guardian.check_safety(prompt)
                     if safety_decision == SafetyDecision.BLOCK:
-                        return self._block_response("Security Blocked: Potential safety violation detected.")
+                        return generate_block_response(
+                            reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="guardian",
+                        )
 
         # Final decision for header tagging (Warning if either flagged)
         final_decision = SafetyDecision.WARNING if (safety_decision == SafetyDecision.WARNING or scan_decision == SafetyDecision.WARNING) else SafetyDecision.ALLOW
@@ -162,8 +179,7 @@ class LLMProxy:
             logger.exception(f"Unexpected error forwarding {method} {path}: {exc}")
             return Response(content="Internal Server Error", status_code=500)
 
-    def _block_response(self, message: str) -> Response:
-        return Response(content=message, status_code=403)
+
 
     def _update_body_prompt(self, old_content: bytes, new_prompt: str) -> bytes:
         try:

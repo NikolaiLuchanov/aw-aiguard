@@ -94,6 +94,32 @@ The HITL middleware intercepts requests identified as "irreversible" or "high-ri
 - **Header Integrity**: Strips client-side `Authorization` headers and injects the secure proxy key.
 - **Reliability**: 600s timeouts for long LLM generations and connection pooling to prevent resource leaks.
 
+### Block Response Schema (Phase 1.6)
+When the proxy intercepts and blocks a request, it returns a standardized `403 Forbidden` JSON response:
+
+```json
+{
+  "error": {
+    "code": "BLOCKED",
+    "message": "Request blocked by aw-aiguard security policy.",
+    "reason": "<REASON_CODE>",
+    "blocked_by": "<COMPONENT>",
+    "request_id": "<UUID>" // Optional — included for HITL blocks
+  }
+}
+```
+
+**Reason codes:**
+
+| `reason` | `blocked_by` | Triggered by |
+|---|---|---|
+| `POTENTIAL_SAFETY_VIOLATION` | `guardian` | Guardian safety check |
+| `CRITICAL_SECRET_DETECTED` | `pii_scanner` | PII/Secrets scanner |
+| `HITL_DENIED` | `hitl_gate` | Human denied the HITL request |
+| `HITL_EXPIRED` | `hitl_gate` | HITL request timed out |
+
+**HITL re-submission note (future work):** When a HITL request is denied or expired, polling `/hitl/status/{request_id}` returns the standardized block error embedded in the response. However, if the client re-submits the original prompt, it currently triggers a *new* HITL pause (new `request_id`) rather than an immediate block. Tracking denied/expired request_ids across submissions to return an instant block is planned for a future phase.
+
 ## ✅ Verification Suite
 
 You can verify the proxy is working using `curl`. Replace `YOUR_API_KEY` if you are testing with a key that the proxy is meant to override.

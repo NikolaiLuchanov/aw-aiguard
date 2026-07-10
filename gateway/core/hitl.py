@@ -7,6 +7,8 @@ import asyncio
 from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 
+from gateway.core.block import BlockReason
+
 logger = logging.getLogger(__name__)
 
 class HitlStatus:
@@ -97,7 +99,8 @@ class HITLGate:
             "status": req.status,
             "rule_name": req.rule_name,
             "created_at": req.created_at,
-            "expires_at": req.created_at + req.timeout_seconds
+            "expires_at": req.created_at + req.timeout_seconds,
+            "error": self._block_error(req.status, req.request_id) if req.status in (HitlStatus.DENIED, HitlStatus.EXPIRED) else None,
         }
 
     def get_pending(self) -> list:
@@ -106,6 +109,18 @@ class HITLGate:
             for r in self.pending_requests.values()
             if r.status == HitlStatus.PENDING
         ]
+
+    def _block_error(self, status: str, request_id: str) -> Dict[str, str]:
+        """Return a standardized block error dict for denied/expired requests."""
+        reason = BlockReason.HITL_DENIED if status == HitlStatus.DENIED else BlockReason.HITL_EXPIRED
+        error = {
+            "code": "BLOCKED",
+            "message": "Request blocked by aw-aiguard security policy.",
+            "reason": reason,
+            "blocked_by": "hitl_gate",
+            "request_id": request_id,
+        }
+        return error
 
     async def start_cleanup(self):
         self._background_task = asyncio.create_task(self._cleanup_loop())
