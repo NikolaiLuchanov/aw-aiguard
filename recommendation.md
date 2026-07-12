@@ -37,7 +37,7 @@ Run your main LLM through a **pre-check + post-check** pattern using Granite4.1 
 Per the summary's golden rule — sever at least one vertex:
 
 - **Segment permissions:** Don't connect your agent to email/repositories/database simultaneously. Give each task flow *only* the tools and access it needs for that specific task. This is enforced by the proxy gateway's routing table and API key scoping.
-- **Scrub secrets from context:** Before feeding any content into the LLM's context window, strip environment variables and secrets. This directly addresses the Microsoft GitHub Action case study in the summary. PII/Secrets scanning runs in parallel as an async background layer — it does not block the LLM call but redacts found patterns (e.g., `***REDACTED_API_KEY***`) and logs warnings.
+- **Scrub secrets from context:** Before feeding any content into the LLM's context window, strip environment variables and secrets. This directly addresses the Microsoft GitHub Action case study in the summary. PII/Secrets scanning runs in parallel as an async background layer — configurable via `SCAN_ACTION_MODE`: in `warn` mode it does not block the LLM call but redacts found patterns (e.g., `***REDACTED_API_KEY***`) and logs warnings; in `block` mode (default) it returns 403 on critical secrets.
 
 ### 4. Architecture-Level Data/Command Separation (CaMeL Approach)
 From the Google DeepMind CaMeL framework referenced in the summary: physically isolate data flows from control flows. Don't let untrusted content influence program logic — use structured schemas for tool calls, don't parse LLM output as executable code or shell commands.
@@ -77,13 +77,13 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 
 | Rule ID | Description | Enforcement Level |
 |---|---|---|
-| `never_delete` | No command to delete data, files, or records — ever. Requires human approval. | Hard stop (no HITL override possible) |
+| `never_delete` | No command to delete data, files, or records — ever. Requires human approval via HITL gate. | Middleware gate (HITL approval required) |
 | `never_exfiltrate` | No outbound transmission of data to external URLs / domains not in allowlist. | Hard stop (no HITL override possible) |
 | `never_override_system_prompt` | No prompt injection or system prompt manipulation allowed by user input. | Pre-flight block |
 | `max_tool_calls_per_minute` | Rate limit on tool invocations per API key to prevent abuse. | Guardian soft-block + alert |
 | `irreversible_requires_hitl` | Any destructive write operation requires HITL approval. | Middleware gate |
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary with no fallback path to approval or override.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary that blocks execution immediately, with the exception of HITL-protected rules (e.g., `never_delete`) which require explicit human approval rather than an absolute hard stop.
 
 ### 8. Defense-in-Depth Summary (Updated v1.1)
 
@@ -94,7 +94,7 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 || HITL middleware gate | Human approval UI | Only for irreversible/outbound actions | Final safety gate — no auto-destruction |
 || Post-response filter | Guardian thinking (`--think=true`) | After LLM generates full response | Deep reasoning pass against BYOC rules, subtle injection, trust-level violations |
 || Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
-|| PII/Secrets scanning | Regex + entropy scoring (async) | Parallel to LLM calls | Detect and redact sensitive data without blocking |
+||| PII/Secrets scanning | Regex + entropy scoring (async) | Parallel to LLM calls | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
 || CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
 || **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
 
@@ -106,13 +106,14 @@ Based on the architecture-design1.md v1.1 alignment:
 
 ### Pre-MVP Priority Tasks (Phase 1 Sprints)
 || Priority | Task | Status |
-||---|---|---|---|
-|| **P0** | Core native proxy at `localhost:9020` with cloud-based Guardian pre-flight gate | Must be first |
-|| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | Must complete before production |
-|| P1 | Provenance tagging schema + enforcement pipeline | Needed for trust-gated operations |
-|| P1 | Post-processing thinking-mode verification layer (cloud-side) | Apply selectively to high-risk outputs |
-|| P2 | BYOC stop-limits engine (codified "never do this" rules) | Final safety boundary |
-|| P2 | Data/command separation validation schemas | Structural enforcement at tool-call level |
+|---|---|---|---|
+| **P0** | Core native proxy at `localhost:9020` with cloud-based Guardian pre-flight gate | ✅ Implemented |
+| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | ✅ Implemented |
+| **P0** | HITL resume flow (store full request, re-forward on approval) | ✅ Implemented |
+| P1 | Post-processing thinking-mode verification layer (cloud-side) | Planned (Phase 2) |
+| P2 | Provenance tagging schema + enforcement pipeline | Planned (Phase 2.5) |
+| P2 | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
+| P2 | Data/command separation validation schemas | Planned (Phase 4.5) |
 
 ### Key Design Decisions Aligned with Architecture
 1. **HITL is the bottleneck you *want*:** The architecture places HITL middleware between pre-flight Guardian and actual tool execution. This intentional friction is by design — slow security > fast catastrophe.
@@ -212,16 +213,14 @@ For a **post-response** filter:
 import requests
 
 def check_guardian(text, think_mode=False):
-    """Run text through Granite4.1 Guardian locally via ollama."""
-    mode_flag = "--think=true" if think_mode else "--think=false"
-    import subprocess
-    result = subprocess.run(
-         f"ollama run granite4.1-guardian {mode_flag}",
-        input=build_guardian_prompt(text),
-        capture_output=True, text=True
-     )
-    # Parse <score>yes</score> or <score>no</score> from output
-    return "yes" in result.stdout
+    """Send text to the cloud Guardian server for scoring."""
+    import requests
+    response = requests.post(
+        GUARDIAN_URL,
+        json={"prompt": text, "model": "granite4.1-guardian", "think": think_mode}
+    )
+    # Parse {"score": "yes"} or {"score": "no"} from response
+    return response.json().get("score") == "yes"
 
 def alert_channel(text, channel="email"):  # or "slack" / "telegram"
     if channel == "email":

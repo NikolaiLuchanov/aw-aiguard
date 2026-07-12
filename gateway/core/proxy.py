@@ -8,8 +8,9 @@ from fastapi.responses import StreamingResponse
 
 from gateway.core.guardrail import GuardianGuard, SafetyDecision
 from gateway.core.scanner import PIIScanner
-from gateway.core.hitl import HITLGate, HitlDecision
+from gateway.core.hitl import HITLGate, HitlDecision, RequestContext
 from gateway.core.block import generate_block_response, BlockReason
+from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,7 @@ class LLMProxy:
         guardian: Optional[GuardianGuard] = None, 
         scanner: Optional[PIIScanner] = None,
         hitl: Optional[HITLGate] = None,
+        byoc: Optional[BYOCEngine] = None,
         scan_sequence: str = "A"
     ):
         self.target_url = target_url.rstrip("/")
@@ -35,6 +37,7 @@ class LLMProxy:
         self.guardian = guardian
         self.scanner = scanner
         self.hitl = hitl
+        self.byoc = byoc
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
 
@@ -94,23 +97,9 @@ class LLMProxy:
                 logger.debug("Request body not JSON; skipping prompt extraction for security checks.")
 
         # --- Security Pipeline Execution ---
-        # Pipeline Order: HITL (Early) -> Guardian -> PII Scan -> Forward
-        
-        # Step 1: Early HITL Check (before any resource-intensive checks)
-        if prompt and self.hitl:
-            hitl_decision, request_id = await self.hitl.check_hitl(prompt)
-            if hitl_decision == HitlDecision.PAUSE:
-                return Response(
-                    content=json.dumps({
-                        "request_id": request_id,
-                        "status": "pending_approval",
-                        "message": "Request paused for human approval."
-                    }),
-                    status_code=202,
-                    media_type="application/json"
-                )
+        # Pipeline Order: Guardian -> PII Scan -> HITL (Post-Security) -> Forward
 
-        # Step 2: Guardian Safety Check
+        # Step 1 & 2: Guardian + PII Scan (security layers before HITL)
         if prompt:
             if self.scan_sequence == "A":
                 # SEQUENCE A: Guardian -> PII
@@ -154,8 +143,44 @@ class LLMProxy:
                             blocked_by="guardian",
                         )
 
+        # Step 3: Post-Security HITL Check (after Guardian + PII have cleared the request)
+        if prompt and self.hitl:
+            # Build request context for HITL resume (store full request for replay after approval)
+            request_context = RequestContext(
+                method=method,
+                url=url,
+                headers=dict(request.headers),
+                body=current_content,
+            )
+            hitl_decision, request_id = await self.hitl.check_hitl(prompt, request_context=request_context)
+            if hitl_decision == HitlDecision.PAUSE:
+                return Response(
+                    content=json.dumps({
+                        "request_id": request_id,
+                        "status": "pending_approval",
+                        "message": "Request paused for human approval."
+                    }),
+                    status_code=202,
+                    media_type="application/json"
+                )
+
+        # Step 4: BYOC Stop-Limits (final authority — after all other checks)
+        byoc_result: Optional[BYOCCheckResult] = None
+        if prompt and self.byoc:
+            byoc_result = self.byoc.check(prompt, self.api_key)
+            if byoc_result.decision == SafetyDecision.BLOCK:
+                return generate_block_response(
+                    reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                    message=byoc_result.message,
+                    blocked_by="byoc_engine",
+                )
+
         # Final decision for header tagging (Warning if either flagged)
-        final_decision = SafetyDecision.WARNING if (safety_decision == SafetyDecision.WARNING or scan_decision == SafetyDecision.WARNING) else SafetyDecision.ALLOW
+        final_decision = SafetyDecision.WARNING if (
+            safety_decision == SafetyDecision.WARNING
+            or scan_decision == SafetyDecision.WARNING
+            or (byoc_result and byoc_result.decision == SafetyDecision.WARNING)
+        ) else SafetyDecision.ALLOW
         headers = self._prepare_headers(request.headers, final_decision)
         
         # Handle streaming logic
@@ -202,3 +227,35 @@ class LLMProxy:
                 async for chunk in response.aiter_bytes():
                     yield chunk
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+    async def forward_stored_request(self, ctx: RequestContext) -> Response:
+        """
+        Forward a previously stored request context (HITL resume flow).
+        Skips all security checks — the request already passed Guardian/PII/HITL.
+        """
+        if not self.client:
+            raise RuntimeError("Proxy client not started. Call start() first.")
+
+        headers = httpx.Headers(ctx.headers)
+        headers["authorization"] = f"Bearer {self.api_key}"
+        headers.pop("content-length", None)
+
+        is_streaming = False
+        if ctx.body:
+            try:
+                body = json.loads(ctx.body)
+                if isinstance(body, dict):
+                    is_streaming = body.get("stream", False)
+            except json.JSONDecodeError:
+                pass
+
+        try:
+            if is_streaming:
+                return await self._handle_streaming(ctx.method, ctx.url, headers, ctx.body)
+            return await self._handle_standard(ctx.method, ctx.url, headers, ctx.body)
+        except httpx.RequestError as exc:
+            logger.error(f"Network error forwarding HITL-resume request: {exc}")
+            return Response(content="Bad Gateway: Could not reach LLM provider", status_code=502)
+        except Exception as exc:
+            logger.exception(f"Unexpected error forwarding HITL-resume request: {exc}")
+            return Response(content="Internal Server Error", status_code=500)

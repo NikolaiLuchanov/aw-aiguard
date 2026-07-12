@@ -11,10 +11,11 @@ class PIIScanner:
     High-performance PII and Secret scanning engine.
     Uses regex-based pattern matching with action-based rules.
     """
-    def __init__(self, rules_path: str, redaction_mode: str = "token"):
+    def __init__(self, rules_path: str, redaction_mode: str = "token", block_mode: str = "block"):
         self.redaction_mode = redaction_mode
+        self.block_mode = block_mode.lower()  # "block" = enforce block actions; "warn" = down-grade block to warn
         self.rules = self._load_rules(rules_path)
-        logger.info(f"PIIScanner initialized with {len(self.rules)} rules in {redaction_mode} mode.")
+        logger.info(f"PIIScanner initialized with {len(self.rules)} rules in {redaction_mode} mode, action={block_mode}.")
 
     def _load_rules(self, path: str) -> List[Dict]:
         try:
@@ -44,8 +45,13 @@ class PIIScanner:
                 continue
             
             if action == 'block':
-                logger.warning(f"CRITICAL: {rule['name']} detected. Blocking request.")
-                return text, SafetyDecision.BLOCK
+                if self.block_mode == 'block':
+                    logger.warning(f"CRITICAL: {rule['name']} detected. Blocking request.")
+                    return text, SafetyDecision.BLOCK
+                else:
+                    logger.warning(f"SECURITY WARN (block downgraded): {rule['name']} detected in prompt (SCAN_ACTION_MODE=warn).")
+                    if overall_decision == SafetyDecision.ALLOW:
+                        overall_decision = SafetyDecision.WARNING
             elif action == 'ignore':
                 continue
             elif action == 'warn':

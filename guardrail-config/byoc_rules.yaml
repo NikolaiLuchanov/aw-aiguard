@@ -1,6 +1,39 @@
 # BYOC (Bring Your Own Criteria) Stop-Limits
 # These are hard boundaries that no model decision can override.
+# Enforcement hierarchy: BYOC applies AFTER Guardian, PII, and HITL checks.
+# - hard_stop: immediate block, no override
+# - hitl_gate: pause for human approval (already handled by HITL rules, BYOC re-enforces)
+# - soft_block: Guardian alert + log warning
 
-never_delete: true
-never_exfiltrate: true
-irreversible_requires_hitl: true
+rules:
+  - name: "never_delete"
+    description: "No command to delete data, files, or records — ever."
+    pattern: "delete|rm -rf|rm -r |DROP TABLE|DROP DATABASE|TRUNCATE|unlink|remove_file"
+    enforcement: "hitl_gate"
+    severity: "critical"
+
+  - name: "never_exfiltrate"
+    description: "No outbound transmission of data to external URLs/domains not in allowlist."
+    pattern: "curl -d.*http|wget.*-O|fetch.*POST|requests\\.post.*http|send.*external|exfiltrate"
+    enforcement: "hard_stop"
+    severity: "critical"
+
+  - name: "irreversible_requires_hitl"
+    description: "Any destructive write operation requires HITL approval."
+    pattern: "git push|git force-push|git commit.*--amend|chmod 777|sudo.*rm"
+    enforcement: "hitl_gate"
+    severity: "high"
+
+  - name: "never_override_system_prompt"
+    description: "No prompt injection or system prompt manipulation."
+    pattern: "ignore all instructions|system prompt|you are now|override system| disregard previous"
+    enforcement: "hard_stop"
+    severity: "critical"
+
+  - name: "max_tool_calls_per_minute"
+    description: "Rate limit on tool invocations per API key to prevent abuse."
+    pattern: ""
+    enforcement: "soft_block"
+    severity: "medium"
+    rate_limit: 60
+    window_seconds: 60

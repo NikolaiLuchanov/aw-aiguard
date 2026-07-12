@@ -35,8 +35,10 @@
 - [ ] **1.5 HITL "Pause" Middleware (P0 Requirement)**
     - Implement the interception logic for irreversible tool calls (e.g., delete, send email, commit code).
     - Logic: Match irreversible pattern $\\rightarrow$ Mark status as `pending_approval` $\\rightarrow$ Return `pending` response to agent.
-- [ ] **1.6 Basic Block Responses**
+- [x] **1.6 Basic Block Responses**
     - Create standardized \"Safe Block\" responses for guardrail triggers and HITL denials.
+    - **HITL Resume Flow** (gap fix): Store full HTTP request (method, URL, headers, body) on HITL pause. After approval, proxy re-forwards via `POST /hitl/resume/{request_id}` — no client re-submission needed.
+    - **BYOC Stop-Limits Engine** (gap fix): `gateway/core/byoc.py` enforces structured rules from `byoc_rules.yaml`. Three enforcement levels: `hard_stop` (403 block), `hitl_gate` (warning flag), `soft_block` (log + alert). Runs as final authority after Guardian → PII → HITL.
 
 ### Phase 2: Infrastructure & Audit (The \"Cloud Brain\")
 *Goal: Deploy the management and safety layer to the cloud to offload local resources and establish a permanent audit trail.*
@@ -51,7 +53,11 @@
     - Configure cloud-side webhooks for Telegram, Slack, and Email.
     - Logic: Cloud Model Server `no` score $\\rightarrow$ Cloud Alert Engine $\\rightarrow$ User.
 - [ ] **2.4 Cloud DB Schema**
-    - Initialize the cloud PostgreSQL tables for `audit_logs`, `api_keys`, and `settings_history`.
+    - Initialize the cloud PostgreSQL tables for `audit_logs`, `api_keys`, `settings_history`, and `provenance` (source_id, trust_level, ingested_at).
+- [ ] **2.5 Provenance Tagging Pipeline (Layer 0)**
+    - Implement the `provenance` object (source_id, trust_level, etc.) and ensure it carries through the request lifecycle.
+    - Logic: Tag data at ingestion time → Attach provenance to audit logs → Store in cloud PostgreSQL.
+    - Enables trust-gated operations for Phase 3 BYOC stop-limits.
 
 ### Phase 3: The Policy Hub (Management & Control)
 *Goal: Implement the human approval interface and the final "Hard Boundary" enforcement layer.*
@@ -60,18 +66,19 @@
     - Build a lightweight web interface integrated with the central service.
     - **Approval Queue:** View pending HITL requests with provenance $\\rightarrow$ Click \"Approve\" or \"Deny\".
 - [ ] **3.2 BYOC Stop-Limits Engine**
-    - Codify \"Never Do This\" rules in `byoc_rules.yaml` (e.g., `never_delete`, `never_exfiltrate`).
-    - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated.
+    - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop`, `hitl_gate`, `soft_block` levels is active.)*
+    - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.
+    - Codify additional "Never Do This" rules in `byoc_rules.yaml` (e.g., `never_delete`, `never_exfiltrate`).
+    - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated, except HITL-protected rules (e.g. `never_delete`) which pause for human approval.
 - [ ] **3.3 Approval Execution Flow**
-    - Logic: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request`.
+    - *(Local version done in Phase 1.6 gap fix — `POST /hitl/resume/{request_id}` handles the full flow.)*
+    - Extend with cloud persistence: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request` via the Central Service.
 - [ ] **3.4 Centralized Config Sync**
     - Implement backend-to-local sync for Guardian thresholds, alert channels, and BYOC updates.
 
 ### Phase 4: Defense-in-Depth (Advanced Hardening)
 *Goal: Implement complex safety patterns and structural constraints to address indirect injection and data poisoning.*
 
-- [ ] **4.1 Provenance Tagging Pipeline (Layer 0)**
-    - Implement the `provenance` object (source\\_id, trust\\_level, etc.) and ensure it carries through the request lifecycle.
 - [ ] **4.2 Stored Injection Countermeasures**
     - Implement ingestion-time sanitization (e.g., stripping `<script>` tags, zero-width chars) for RAG data and fetched content.
 - [ ] **4.3 LLM05 Output Control**
@@ -90,7 +97,7 @@
     - Attempt prompt injections, secret exfiltration, and fact substitution.
     - Verify that all \"Block\", \"Pause\", and \"BYOC\" events are correctly logged and alerted.
 - [ ] **5.2 Performance Optimization**
-    - Tune Ollama inference and FastAPI middleware to minimize latency between local and cloud hops.
+    - Tune Guardian HTTP latency and FastAPI middleware to minimize round-trips between local proxy and cloud backend.
 - [ ] **5.3 Documentation & Handover**
     - Finalize the setup guide, developer documentation, and security audit logs.
 
@@ -105,7 +112,7 @@ The Gateway Proxy is designed to be stateless. The switch from local development
 | Component | Technology | Role |
 | :--- | :--- | :--- |
 | **Gateway Proxy** | Python / FastAPI | Interception, Guardian Scoring, PII Scanning, HITL Pause, LLM05 Control |
-| **Safety Model** | Ollama / Granite 4.1 | Pre-flight safety classification & Thinking-mode verification |
+| **Safety Model** | Cloud-Hosted Granite 4.1 | Pre-flight safety classification & Thinking-mode verification |
 | **Admin Dashboard** | Python (Web Framework) | HITL Approvals, BYOC Management & System Configuration |
 | **Audit Storage** | PostgreSQL / MinIO | Event logging, Settings, and Long-term archiving |
 | **Deployment** | Docker Compose | Local orchestration of backend services |

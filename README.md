@@ -28,20 +28,30 @@ The system operates using two distinct ports to separate the lightweight proxy f
 
 | Port | Role | Direction | Description |
 | :--- | :--- | :--- | :--- |
-| **`9020`** | **Gateway Proxy** | `Client` $\rightarrow$ `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
-| **`8000`** | **Central Service** | `Gateway` $\rightarrow$ `Backend` | The "Brain." Handles DB, Audit logs, and HITL state. |
+| **`9020`** | **Gateway Proxy** | `Client` $\\rightarrow$ `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
+| **`8000`** | **Central Service** | `Gateway` $\\rightarrow$ `Backend` | The "Brain." Handles DB, Audit logs, HITL state, and **cloud Guardian scoring**. |
 
 ## ☁️ Dev vs. Production Transition
 
-The system is designed to be "Cloud-Ready." The transition from local development to production is controlled by the `GUARD_BACKEND_URL` in your `.env` file.
+The system is designed to be "Cloud-Ready." The transition from local development to production is controlled by the `GUARDIAN_URL` in your `.env` file.
 
-- **Development Mode:** `GUARD_BACKEND_URL=http://localhost:8000`
-  - The Gateway communicates with a local instance of the Central Service and a local PostgreSQL DB.
-- **Production Mode:** `GUARD_BACKEND_URL=https://api.aw-aiguard.cloud`
-  - The Gateway communicates with the cloud-deployed container stack (PostgreSQL, Model Server, and Management Dashboard).
+- **Development Mode:** `GUARDIAN_URL=http://localhost:8000/guardian`
+  - The Gateway communicates with a local mock Guardian instance for testing.
+- **Production Mode:** `GUARDIAN_URL=https://api.aw-aiguard.cloud/guardian`
+  - The Gateway communicates with the cloud-deployed Guardian model server.
 
 ## 🏗️ Project Structure
 - `gateway/`: The lightweight interception proxy (Port 9020).
-- `central-service/`: The resource-heavy management and audit backend (Port 8000).
-- `guardrail-config/`: YAML-based safety rules (BYOC) and system thresholds.
+  - `core/proxy.py` — Core reverse proxy with streaming support
+  - `core/guardrail.py` — Guardian pre-flight safety adapter (4 fail-safe strategies)
+  - `core/scanner.py` — PII/Secrets regex + entropy scanner (Sequence A/B)
+  - `core/hitl.py` — HITL pause middleware with full request resume flow
+  - `core/byoc.py` — BYOC stop-limits enforcement engine (hard_stop, hitl_gate, soft_block)
+  - `core/block.py` — Standardized 403 block response generator
+- `central-service/`: The resource-heavy management and audit backend (Port 8000). *(Phase 2)*
+- `guardrail-config/`: YAML-based safety rules and system thresholds.
+  - `byoc_rules.yaml` — Structured BYOC stop-limits (patterns, enforcement, severity)
+  - `hitl_rules.yaml` — Irreversible action patterns with per-rule timeouts
+  - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
+  - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.

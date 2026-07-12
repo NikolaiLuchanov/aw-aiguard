@@ -4,7 +4,7 @@ import re
 import yaml
 import logging
 import asyncio
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 
 from gateway.core.block import BlockReason
@@ -22,6 +22,14 @@ class HitlDecision(str):
     PAUSE = "pause"
 
 @dataclass
+class RequestContext:
+    """Stores the full HTTP request so the proxy can replay it on approval."""
+    method: str
+    url: str
+    headers: dict
+    body: bytes
+
+@dataclass
 class PendingRequest:
     request_id: str
     prompt: str
@@ -29,6 +37,7 @@ class PendingRequest:
     timeout_seconds: int
     status: str = HitlStatus.PENDING
     created_at: float = field(default_factory=time.time)
+    request_context: Optional[RequestContext] = None
 
 class HITLGate:
     """
@@ -54,7 +63,7 @@ class HITLGate:
             logger.error(f"Failed to load HITL rules from {path}: {e}")
             return []
 
-    async def check_hitl(self, prompt: str) -> tuple:
+    async def check_hitl(self, prompt: str, request_context: Optional[RequestContext] = None) -> tuple:
         """
         Returns (HitlDecision, Optional[str]) where str is the request_id if PAUSED.
         """
@@ -65,7 +74,8 @@ class HITLGate:
                     request_id=request_id,
                     prompt=prompt,
                     rule_name=rule['name'],
-                    timeout_seconds=rule.get('timeout_seconds', self.default_timeout)
+                    timeout_seconds=rule.get('timeout_seconds', self.default_timeout),
+                    request_context=request_context,
                 )
                 logger.warning(f"HITL PAUSE: {rule['name']} triggered for request {request_id}")
                 return HitlDecision.PAUSE, request_id
@@ -121,6 +131,34 @@ class HITLGate:
             "request_id": request_id,
         }
         return error
+
+    def get_request_context(self, request_id: str) -> tuple:
+        """
+        Return the stored request context for replay, or None if not found/approved.
+        Returns (RequestContext, None) on approved, (None, error_dict) on denied/expired/not-found.
+        """
+        req = self.pending_requests.get(request_id)
+        if not req:
+            return None, {"error": "Request not found"}
+
+        # Check expiry
+        if req.status == HitlStatus.PENDING and (time.time() - req.created_at) > req.timeout_seconds:
+            req.status = HitlStatus.EXPIRED
+            logger.warning(f"HITL EXPIRED on resume: {request_id}")
+            return None, self._block_error(req.status, request_id)
+
+        if req.status != HitlStatus.APPROVED:
+            return None, {
+                "error": f"Request not approved. Current status: {req.status}"
+            }
+
+        if not req.request_context:
+            return None, {
+                "error": "No stored request context for this approval."
+            }
+
+        logger.info(f"HITL RESUME: returning context for {request_id}")
+        return req.request_context, None
 
     async def start_cleanup(self):
         self._background_task = asyncio.create_task(self._cleanup_loop())

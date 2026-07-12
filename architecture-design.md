@@ -55,9 +55,9 @@ Every tool uses `localhost:9020` as its API gateway. The proxy acts as an **Anth
        # OR   
    export OPENAI_BASE_URL="http://localhost:9020/v1/compatibility"
     ```
-- **Mechanism:** When Claude Code or Codex fires a JSON request to `.../v1/messages`, the proxy intercepts it locally. The proxy strips the raw `user_input` string, runs it through local `ollama run granite4.1-guardian --think=false`, and decides in <1 second:
+- **Mechanism:** When Claude Code or Codex fires a JSON request to `.../v1/messages`, the proxy intercepts it locally. The proxy strips the raw `user_input` string, sends it to the **cloud Guardian server** (`GUARDIAN_URL`) via HTTP POST, and receives a `yes`/`no` score:
      - `yes`: Forwards the payload natively via HTTP POST to the real Anthropic/OpenAI cloud API. Injects Guardian's safety metadata into response headers (for audit).
-     - `no`: Blocks execution locally. Returns an immediate error or safe placeholder (`"[Guardian Warning: Prompt blocked for safety review.]"`). Zero cloud API cost incurred, zero latency penalty beyond the local GPU/Ollama inference time.
+     - `no`: Blocks execution locally. Returns an immediate error or safe placeholder (`"[Guardian Warning: Prompt blocked for safety review.]"`). Zero LLM cloud API cost incurred — only the lightweight Guardian HTTP hop is consumed.
 
 ### 3.2 Claude Cowork (Desktop GUI / Research Preview)
 - **Interception:** Cowork is a desktop agent that runs inside the Claude Desktop ecosystem. It communicates with the LLM via an internal JSON bridge or HTTP endpoint.
@@ -72,8 +72,8 @@ Every tool uses `localhost:9020` as its API gateway. The proxy acts as an **Anth
     async def on_tool_execute(tool_event):
        user_purpose = tool_event.user_input
          
-          # 1. Guardrail runs locally against Granite4.1
-        safety_result = await ollama_generate("granite4.1-guardian", prompt=user_purpose)
+          # 1. Guardrail runs against the cloud Guardian server
+        safety_result = await guardian_check_safety(prompt=user_purpose)
         
         if safety_result.score == "no":
             raise SafetyBlockError("Guardian flagged unsafe intent.") 
@@ -91,7 +91,8 @@ The proxy gateway remains the authoritative log of all block events, whereas dir
 - **Mechanism:** When a tool call matches an irreversible pattern from the allowlisted BYOC rules, the proxy returns a `pending_approval` status to the calling agent instead of forwarding the request. An approval UI is presented via the agent's interface (e.g., Hermes confirmation prompt in CLI, dialog in Cowork). Execution resumes only when explicit human approval is received within a configurable timeout window (default: 5 minutes; after which the request auto-denies).
 - **Security rationale:** The most critical safety gap in any LLM security architecture. Prompt injection and hallucination can cause fully autonomous agents to execute destructive commands without detection. HITL ensures no irreversible action occurs without human oversight, regardless of Guardian scores or other safeguards.
 - **Provenance integration:** Each HITL approval request carries a `provenance_tag` in its payload (see Section 5) so the approver knows exactly which data source and trust level the request is operating on.
-- **Implementation state:** Pre-MVP — MUST be implemented before any irreversible tool access is enabled in production.
+- **Resume Flow:** When a HITL request is approved, the proxy stores the full original HTTP request (method, URL, headers, body) and re-forwards it to the LLM provider via `POST /hitl/resume/{request_id}` — no client re-submission needed. Denied or expired requests return a `403` with the standardized block error.
+- **Implementation state:** Implemented in Phase 1.5/1.6.
 
 ### 3.5 Data/Command Separation Enforcement (CaMeL Pattern)
 
@@ -109,7 +110,7 @@ Option B is designed to handle both real-time blocking and comprehensive post-ho
 
 ### Layer 1: Pre-Flight Safety Gate (Real-Time)
 **Goal:** *Block malicious or harmful intent before execution.*  
-Every single payload hits the local guardrail *before* the tool is invoked. If `granite4.1-guardian` scores it as unsafe (`no`), execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
+Every single payload hits the guardrail *before* the tool is invoked. The proxy sends the prompt to the **cloud Guardian server**, which scores it. If `granite4.1-guardian` returns `no`, execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
 
 ### Layer 2: PII & Secrets Scanning (Integrated in Proxy)
 **Goal:** *Detect and redact sensitive data before it leaves the local machine, preventing accidental exposures.*
@@ -122,9 +123,16 @@ The proxy supports two configurable sequences to balance security and privacy:
 #### Action-Based Rule Engine
 Scanning is driven by `scan_rules.yaml` using the following actions:
 - `redact`: Replace match with a token/mask (e.g., `[SECRET_1]` or `AKIA****1234`).
-- `block`: Stop the request immediately (403 Forbidden).
+- `block`: Stop the request immediately (403 Forbidden). **Unless overridden by `SCAN_ACTION_MODE=warn`** (see below), which downgrades all `block` actions to `warn`.
 - `warn`: Allow request but trigger a high-priority security alert.
 - `ignore`: Explicitly allow a specific pattern (Allowlisting).
+
+#### Action Mode Override (`SCAN_ACTION_MODE`)
+The `SCAN_ACTION_MODE` environment variable controls how the scanner enforces `block` rules defined in `scan_rules.yaml`:
+- `block` (Default): Rules with `action: block` immediately stop the request (403 Forbidden). Use in production for maximum security.
+- `warn`: Rules with `action: block` are downgraded to `warn` — the request proceeds, a warning is logged, and a `WARNING` flag is set. Use during development or staging to identify sensitive data without blocking workflow.
+
+This allows the same `scan_rules.yaml` to behave as a strict blocker in production and a permissive auditor in development without changing rule definitions.
 
 #### Directionality Roadmap
 - **Current (v1.4)**: **Outgoing Only**. Scans request bodies and headers before they leave the local machine.
@@ -203,7 +211,15 @@ Each developer or agent instance is provisioned a unique, scoped API key (`Beare
 **Goal:** *Codify explicit "never do this" rules that override any other safety check, including Guardian scores.*
 
 A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-flight gate, HITL middleware, and provenance enforcement. It defines hard boundaries that no model decision can bypass:
-**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately with no fallback path to approval or override.
+
+**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 4 in the proxy pipeline (after Guardian → PII → HITL).
+
+**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
+
+**Three enforcement levels:**
+- `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
+- `hitl_gate`: Passes with `WARNING` flag; still subject to HITL pause (e.g. `never_delete`)
+- `soft_block`: Log warning + alert, request continues (e.g. `max_tool_calls_per_minute`)
 
 ---
 
@@ -262,8 +278,7 @@ This layer runs *in parallel* with the Guardian safety gate on **every outbound 
 - **Scan Pipeline:**   
      1. Extract raw JSON body & HTTP headers from the incoming tool call.  
      2. Run lightweight pattern-matchers (regex + entropy) against every string field in background threads.  
-     3. If a match exceeds a confidence threshold, **redact** it in-place (`***REDACTED_API_KEY***`) and push a `WARN` flag to the audit log asynchronously (does not block the LLM call).   
-     4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 1) for an LLM-based secondary check on sensitive content.
+     3. If a match exceeds a confidence threshold, apply the configured action: **block** (403 if `SCAN_ACTION_MODE=block`), **warn** (log + `WARNING` flag if `SCAN_ACTION_MODE=warn`), or **redact** (in-place masking with `***REDACTED_API_KEY***`). All actions push an async audit log entry.   \n     4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 1) for an LLM-based secondary check on sensitive content.
 - **Alerts & Audits:** Any `WARN` flags from PII/Secrets scanning are tagged in the audit table (`audit_tags = pii_detected`, `audit_tags = secret_exposure`). If your alerting channels (Slack, Telegram) support severity levels, these fire as "Warning" alerts rather than hard "Block" alerts — allowing developers to review what was auto-redacted without blocking their work.
 - **Configurability:** You provide an allowlist of safe patterns (e.g., `"example.com"`, `"test-key-*"`) and the proxy skips redaction for those. All other traffic is scanned with aggressive defaults. This is controlled locally by `~/.config/aw-aiguard/scan_rules.yaml` — see Section 10 for synchronization details.
 
@@ -273,7 +288,7 @@ This layer runs *in parallel* with the Guardian safety gate on **every outbound 
 | **Claude Code** | All CLI arguments, stdin/stdout JSON payloads, env var dumps. | Redact in-place; log warning to Central Audit DB. |
 | **OpenAI Codex** | HTTP request body fields (`messages` array text), system prompts. | Redact; return modified JSON with `***REDACTED***` placeholders. |
 | **Claude Cowork** | Internal bridge JSON files & HTTP payloads from/to Desktop Agent. | Auto-sanitize file paths, URL configs, email fields in output. |
-| **Hermes Agent** | Every tool invocation argument (`browser_navigate` URLs, `curl` payload bodies, file reads). | Block if credentials present; warn/redact for PII. Store audit logs. |
+| **Hermes Agent** | Every tool invocation argument (`browser_navigate` URLs, `curl` payload bodies, file reads). | Block if credentials present (`SCAN_ACTION_MODE=block`); warn/redact for PII. Store audit logs. |
 
 #### Future Extensibility
 - Can be later swapped for a local dedicated model (e.g., a small LLM fine-tuned on NER — Named Entity Recognition) if you need higher accuracy across multilingual or obfuscified secrets.     
@@ -290,9 +305,9 @@ Each developer has a `~/.config/aw-aiguard/settings.yaml` file. The backend push
 
 | Setting | Local File Path | Backend Sync Frequency | Default | Description |
 |---|---|---|---|---|
-| **Guardian Confidence Threshold** | `guardian_threashold: 0.85` | Daily + Immediate on change | `0.85` | Score (`yes`/`no`) boundary for block vs warn/proceed. |
+| **Guardian Confidence Threshold** | `guardian_threshold: 0.85` | Daily + Immediate on change | `0.85` | Score (`yes`/`no`) boundary for block vs warn/proceed. |
 | **LLM Safety Mode** | `llm_safety_mode: hard_block` | Daily + Immediate on change | `hard_block` | One of `[hard_block, warn_only, hybrid]`. |
-| **Secrets Block Mode** | `secrets_block_mode: hard_block` | Daily + Immediate on change | `hard_block` | Per-secret-type overrides (AWS keys $\rightarrow$ block; PII email $\rightarrow$ warn/redact). |
+| **Secrets Block Mode** | `secrets_block_mode: hard_block` | Daily + Immediate on change | `hard_block` | Per-secret-type overrides (AWS keys $\\rightarrow$ block; PII email $\\rightarrow$ warn/redact). Controlled by `SCAN_ACTION_MODE` env var. |
 | **Alert Channels** | `alert_channels: [slack, telegram]` | Weekly + On-demand | `[telegram]` | Which channels receive Guardian alerts per developer. |
 | **Scan Rules YAML** | `scan_rules.yaml` (separate file) | Daily + On-change hot-reload | Aggressive defaults | Allowlisted domains/API key prefixes to ignore. |
 | **Audit Retention TTL** | `audit_ttl_days: 30` | Monthly | `30` | Hot storage retention; cold export is always infinite. |
@@ -336,7 +351,7 @@ To start building, here is the recommended codebase layout:
 aw-aiguard/
 ├── gateway/                  # The Local Guardrail Proxy (FastAPI / Node)
 │     └── main.py             # Core reverse proxy on localhost:9020
-│     └── guardrail.py        # Ollama wrapper to run granite4.1-guardian
+│     └── guardrail.py        # HTTP adapter for the cloud Guardian server
 │     └── scan_secrets.py     # Regex/Entropy PII and secret detection
 │     └── hitl_gate.py        # Human-in-the-loop middleware for irreversible actions [NEW]
 ├── central-service/          # The centralized Postgres + MinIO API
@@ -353,9 +368,10 @@ aw-aiguard/
 
 | Priority | Task | Target | Notes |
 |---|---|---|---|
-| P0 | HITL middleware for irreversible actions (Section 3.4) | Sprint 1–2 | Pre-MVP requirement; blocks before prod deployment | P2 | Core proxy on `localhost:9020` with Guardian pre-flight gate | Sprint 1 | Foundation for all other features |
-| P1 | Provenance tagging schema + enforcement (Section 5) | Sprint 2 | Required for BYOC rule application and audit traceability |
+| P0 | Core proxy on `localhost:9020` with Guardian pre-flight gate (Section 3.1) | Sprint 1 | Foundation for all other features — must be first |
+| P0 | HITL middleware for irreversible actions (Section 3.4) | Sprint 1–2 | Pre-MVP requirement; blocks before prod deployment |
 | P1 | Post-processing thinking-mode verification (Section 4, Layer 3) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
+| P2 | Provenance tagging schema + enforcement (Section 5) | Phase 2 | Pairs with audit infrastructure; enables trust-gated operations for Phase 3 BYOC |
 | P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal of untrusted data flowing into sensitive operations |
 | P2 | BYOC stop-limits engine (Section 6C) | Sprint 3 | Codifies "never do this" rules as hard enforcement boundary |
 | P2 | Data/command separation schemas (Section 3.5) | Sprint 3 | Validate all tool-call parameters against typed JSON schema |

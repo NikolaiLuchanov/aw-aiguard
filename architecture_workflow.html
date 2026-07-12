@@ -76,20 +76,26 @@ flowchart TD
         direction TB
         
         %% Pre-Flight Layer
-        subgraph PreFlight ["Layer 1: Pre-Flight Guardrails"]
-            P1["PII & Secrets Scanning"] -- Async Redaction --> P2
+        subgraph PreFlight ["Layer 1: Pre-Flight Guardrails (Default: Guardian → PII)"]
             P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
+            P1["PII & Secrets Scanning<br/>(SCAN_ACTION_MODE=block)"]
             P3{"Function-Call<br/>Hallucination Check"}
             P4["JSON Schema Validation<br/>CaMeL Separation"]
         end
 
         %% Decision Logic
         Decision{"Guardian<br/>Score is NO?"}
-        
+    
         %% HITL Layer
         subgraph HITL ["Layer 2: Human-in-the-Loop"]
             H1{"Irreversible<br/>Action?"}
             H2["Pause for Human<br/>Approval UI"]
+            H3["Resume: Re-forward<br/>Stored Request"]
+        end
+    
+        %% BYOC Layer
+        subgraph BYOC ["Layer 3: BYOC Stop-Limits (Final Authority)"]
+            BY1{"BYOC Rule<br/>Violation?"}
         end
 
         %% Execution
@@ -133,13 +139,13 @@ flowchart TD
     Decision -- Yes --> Block[Block Response]
     
     %% Pass path
-    Decision -- No --> BYOC{"BYOC Stop-Limits<br/>(Hard Boundary)"}
-    BYOC -- Violation --> Block
-    BYOC -- Pass --> H1
-    H1 -- No --> Exec
+    Decision -- No --> H1
+    H1 -- No --> BY1
     H1 -- Yes --> H2
-    H2 -- Approved --> Exec
-    H2 -- Denied --> Block
+    H2 -- Approved --> H3
+    H3 -- Stored Request --> BY1
+    BY1 -- Violation --> Block
+    BY1 -- Pass --> Exec
     
     %% After execution
     Exec --> PF1 --> PF2 --> Clients
@@ -152,11 +158,14 @@ flowchart TD
     %% Styling
     style Decision fill:#fff4e6,stroke:#f96,stroke-width:3px
     style H2 fill:#fffcf0,stroke:#d4a017,stroke-width:3px
+    style H3 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style BY1 fill:#fff4e6,stroke:#f96,stroke-width:3px
     style Block fill:#ffebee,stroke:#c62828,stroke-width:2px
     style Alert fill:#fffde7,stroke:#fbc02d,stroke-width:2px
     style Proxy fill:#f8fafc,stroke:#64748b,stroke-width:2px
     style Backend fill:#f1f5f9,stroke:#47569,stroke-width:2px
     style PostFlight fill:#f8fafc,stroke:#64748b,stroke-width:2px
+    style BYOC fill:#fff8e1,stroke:#f57c00,stroke-width:2px
         </div>
     </div>
 </body>

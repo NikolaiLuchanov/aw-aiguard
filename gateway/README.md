@@ -21,6 +21,7 @@ GUARDIAN_FAIL_STRATEGY=block
 # PII & Secrets Scanner (Phase 1.4+)
 SCAN_SEQUENCE=A
 SCAN_REDACTION_MODE=token
+SCAN_ACTION_MODE=block
 
 # HITL "Pause" Middleware (Phase 1.5+)
 HITL_DEFAULT_TIMEOUT=300
@@ -39,12 +40,13 @@ chmod +x run-gateway-dev.sh
 ### Request/Response Lifecycle
 The proxy implements a full round-trip flow to ensure security at both ends of the conversation:
 1. **Interception**: Captures the user prompt from the Agent.
-2. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval.
-3. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
-4. **PII Scan**: (Phase 1.4) Scans and redacts secrets/PII based on `SCAN_SEQUENCE`.
-5. **Forwarding**: Sends the request to the Cloud LLM provider.
-6. **Post-Processing**: (Phase 1.4+) Scans the LLM's response for leaked secrets or dangerous content.
-7. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
+2. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
+3. **PII Scan**: (Phase 1.4) Scans for secrets/PII — blocks (403) if `SCAN_ACTION_MODE=block`, or warns and redacts if `SCAN_ACTION_MODE=warn`.
+4. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
+5. **BYOC Stop-Limits**: (Phase 1.6+) Final enforcement layer — applies "never do this" rules after all other checks pass.
+6. **Forwarding**: Sends the request to the Cloud LLM provider.
+7. **Post-Processing**: (Phase 1.4+) Scans the LLM's response for leaked secrets or dangerous content.
+8. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
 
 ### The `GuardianGuard` Adapter
 The `GuardianGuard` is a robust adapter that mediates between the local proxy and the Cloud Guardian Model Server. It is designed for high reliability and zero-trust.
@@ -70,23 +72,58 @@ The HITL middleware intercepts requests identified as "irreversible" or "high-ri
 
 **Key Functionalities:**
 - **Risk Detection**: Matches prompts against `hitl_rules.yaml` (e.g., `delete_file`, `git push`, `send_email`).
-- **Stateful Buffering**: Stores the request payload in memory with a unique `request_id`.
-- **Long-Polling**: The Agent polls `/hitl/status/{request_id}` until the request is resolved.
+- **Stateful Buffering**: Stores the *full HTTP request* (method, URL, headers, body) in memory with a unique `request_id`.
+- **Resume Flow**: After approval, the proxy re-forwards the stored request to the LLM provider and returns the actual response — no client re-submission needed.
+- **Long-Polling**: The Agent can poll `/hitl/status/{request_id}` to check resolution.
 - **Timeout Enforcement**: Auto-denies requests if no approval is received within the configured `HITL_DEFAULT_TIMEOUT` (default: 300s).
 
 **Endpoints:**
 - `POST /hitl/approve`: Approve a paused request.
-- `POST /hitl/deny`: Deny a paused request.
+- `POST /hitl/deny`: Deny a paused request (returns standardized block error).
 - `GET /hitl/status/{request_id}`: Check the current status of a request.
 - `GET /hitl/pending`: List all pending requests.
+- `POST /hitl/resume/{request_id}`: **(New)** After approval, retrieves the LLM response by forwarding the stored request.
+
+**Complete HITL workflow:**
+```
+Agent → POST /v1/chat/completions (contains "delete_file")
+   ↓
+Proxy → 202 { "request_id": "abc", "status": "pending_approval" }
+   ↓
+Human → POST /hitl/approve { "request_id": "abc" }
+   ↓
+Agent → POST /hitl/resume/abc
+   ↓
+Proxy → 200 { actual LLM response }
+```
 
 ### Architecture
 - **Engine**: `gateway/core/proxy.py` - Handles the `httpx.AsyncClient` lifecycle and header transformations.
 - **Adapter**: `gateway/core/guardrail.py` - The `GuardianGuard` logic for pre-flight safety.
 - **Scanner**: `gateway/core/scanner.py` - The PII and Secrets detection engine.
-- **HITL**: `gateway/core/hitl.py` - The Human-in-the-Loop pause middleware.
+- **HITL**: `gateway/core/hitl.py` - The Human-in-the-Loop pause middleware with resume support.
+- **BYOC**: `gateway/core/byoc.py` - The "Bring Your Own Criteria" stop-limits enforcement engine.
+- **Block**: `gateway/core/block.py` - Standardized block response generator.
 - **Server**: `gateway/main.py` - FastAPI application with wildcard routing.
 - **Port**: `9020` (Default).
+
+### BYOC Stop-Limits Engine (Phase 1.6+)
+The BYOC (Bring Your Own Criteria) engine codifies "never do this" rules as hard enforcement boundaries. It runs as the **final authority** in the pipeline — after Guardian, PII scanning, and HITL checks have all passed.
+
+**Enforcement Levels:**
+
+| Level | Behavior | Example Rule |
+|---|---|---|
+| `hard_stop` | Immediate 403 block, no override possible | `never_exfiltrate`, `never_override_system_prompt` |
+| `hitl_gate` | Passes with `WARNING` flag (still subject to HITL gate) | `never_delete`, `irreversible_requires_hitl` |
+| `soft_block` | Guardian alert + log warning, request continues | `max_tool_calls_per_minute` |
+
+**Configuration:** `guardrail-config/byoc_rules.yaml` — structured rules with patterns, descriptions, enforcement levels, and severity.
+
+**Endpoints:**
+- `GET /byoc/rules`: List all active BYOC stop-limit rules with their enforcement levels.
+
+**How it integrates:** The BYOC engine is configured at startup from `byoc_rules.yaml`. Every request's prompt is checked against all BYOC patterns. A `hard_stop` violation returns a `403` with `blocked_by: "byoc_engine"`. A `hitl_gate` violation tags the request with a `WARNING` but allows it to proceed (since HITL already handles the pause). Rate-limit rules track per-API-key call counts within a sliding window.
 
 ### Key Features
 - **Transparent Pass-Through**: Forwards all methods (`GET`, `POST`, `PUT`, `DELETE`) and returns the corresponding provider responses.
@@ -113,12 +150,13 @@ When the proxy intercepts and blocks a request, it returns a standardized `403 F
 
 | `reason` | `blocked_by` | Triggered by |
 |---|---|---|
-| `POTENTIAL_SAFETY_VIOLATION` | `guardian` | Guardian safety check |
+| `POTENTIAL_SAFETY_VIOLATION` | `guardian` | Guardian pre-flight safety check |
 | `CRITICAL_SECRET_DETECTED` | `pii_scanner` | PII/Secrets scanner |
 | `HITL_DENIED` | `hitl_gate` | Human denied the HITL request |
 | `HITL_EXPIRED` | `hitl_gate` | HITL request timed out |
+| `POTENTIAL_SAFETY_VIOLATION` | `byoc_engine` | BYOC stop-limit rule violation |
 
-**HITL re-submission note (future work):** When a HITL request is denied or expired, polling `/hitl/status/{request_id}` returns the standardized block error embedded in the response. However, if the client re-submits the original prompt, it currently triggers a *new* HITL pause (new `request_id`) rather than an immediate block. Tracking denied/expired request_ids across submissions to return an instant block is planned for a future phase.
+**HITL resume flow:** When a HITL request is approved, the proxy stores the full original HTTP request and re-forwards it to the LLM provider via `POST /hitl/resume/{request_id}` — no client re-submission is needed. If a request is denied or expired, calling `/hitl/resume/{request_id}` returns a `403` with the standardized block error embedded.
 
 ## ✅ Verification Suite
 
@@ -145,7 +183,7 @@ curl http://localhost:9020/v1/chat/completions \
   }'
 ```
 
-### 3. HITL Pause & Approval
+### 3. HITL Pause, Approval & Resume
 ```bash
 # 1. Trigger a pause (e.g., with "delete_file")
 curl http://localhost:9020/v1/chat/completions \
@@ -157,6 +195,17 @@ curl http://localhost:9020/v1/chat/completions \
 curl -X POST http://localhost:9020/hitl/approve \
   -H "Content-Type: application/json" \
   -d '{"request_id": "REQUEST_ID"}'
+# Returns: {"status": "approved", "request_id": "..."}
+
+# 3. Resume — proxy forwards the stored request to the LLM and returns the real response
+curl -X POST http://localhost:9020/hitl/resume/REQUEST_ID
+# Returns: 200 with the actual LLM completion
+```
+
+### 4. BYOC Rule Inspection
+```bash
+curl http://localhost:9020/byoc/rules
+# Returns list of active BYOC stop-limit rules
 ```
 
 ### 4. Error Pass-Through (404 Test)

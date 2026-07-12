@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -7,6 +8,9 @@ from gateway.core.proxy import LLMProxy
 from gateway.core.guardrail import GuardianGuard
 from gateway.core.scanner import PIIScanner
 from gateway.core.hitl import HITLGate
+from gateway.core.byoc import BYOCEngine
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from the gateway folder
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -24,11 +28,15 @@ GUARDIAN_FAIL_STRATEGY = os.getenv("GUARDIAN_FAIL_STRATEGY", "block")
 # PII Scanner Configuration
 SCAN_SEQUENCE = os.getenv("SCAN_SEQUENCE", "A")
 SCAN_REDACTION_MODE = os.getenv("SCAN_REDACTION_MODE", "token")
+SCAN_ACTION_MODE = os.getenv("SCAN_ACTION_MODE", "block")  # "block" or "warn"
 SCAN_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "scan_rules.yaml")
 
 # HITL Configuration
 HITL_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "hitl_rules.yaml")
 HITL_DEFAULT_TIMEOUT = int(os.getenv("HITL_DEFAULT_TIMEOUT", "300"))
+
+# BYOC Configuration
+BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
 
 if not TARGET_URL or not API_KEY:
     print("Error: TARGET_API_BASE_URL and TARGET_API_KEY must be set in gateway/.env")
@@ -44,13 +52,19 @@ guardian = GuardianGuard(
 # Initialize the PII Scanner
 scanner = PIIScanner(
     rules_path=SCAN_RULES_PATH,
-    redaction_mode=SCAN_REDACTION_MODE
+    redaction_mode=SCAN_REDACTION_MODE,
+    block_mode=SCAN_ACTION_MODE  # "block" = 403 on block rules; "warn" = log only
 )
 
 # Initialize the HITL Gate
 hitl = HITLGate(
     rules_path=HITL_RULES_PATH,
     default_timeout=HITL_DEFAULT_TIMEOUT
+)
+
+# Initialize the BYOC Engine
+byoc = BYOCEngine(
+    rules_path=BYOC_RULES_PATH
 )
 
 # Initialize the Proxy Engine with all security components
@@ -60,6 +74,7 @@ proxy_engine = LLMProxy(
     guardian=guardian,
     scanner=scanner,
     hitl=hitl,
+    byoc=byoc,
     scan_sequence=SCAN_SEQUENCE
 )
 
@@ -101,6 +116,28 @@ async def hitl_status(request_id: str):
 @app.get("/hitl/pending")
 async def hitl_pending():
     return JSONResponse(content=hitl.get_pending())
+
+@app.post("/hitl/resume/{request_id}")
+async def hitl_resume(request_id: str):
+    """
+    Called by the client after HITL approval to retrieve the LLM response.
+    The proxy re-sends the stored request context to the cloud API and returns the result.
+    """
+    request_context, error = hitl.get_request_context(request_id)
+    if error:
+        return JSONResponse(content=error, status_code=403)
+
+    try:
+        response = await proxy_engine.forward_stored_request(request_context)
+        return response
+    except Exception as exc:
+        logger.error(f"HITL resume error for {request_id}: {exc}")
+        return JSONResponse(content={"error": "Failed to forward request after HITL approval"}, status_code=502)
+
+@app.get("/byoc/rules")
+async def byoc_rules():
+    """List all active BYOC stop-limit rules."""
+    return JSONResponse(content=byoc.get_rules_summary())
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def catch_all(request: Request):
