@@ -48,7 +48,12 @@ The system is designed to be "Cloud-Ready." The transition from local developmen
   - `core/hitl.py` — HITL pause middleware with full request resume flow
   - `core/byoc.py` — BYOC stop-limits enforcement engine (hard_stop, hitl_gate, soft_block)
   - `core/block.py` — Standardized 403 block response generator
-- `central-service/`: The resource-heavy management and audit backend (Port 8000). *(Phase 2)*
+- `central-service/`: The resource-heavy management and audit backend (Port 8000).
+  - `docker-compose.yml` — Local stack: PostgreSQL 16, MinIO, API server
+  - `Dockerfile` — Python 3.9 slim, installs deps, runs uvicorn
+  - `migrations/001_initial.sql` — Schema: 4 tables + 3 monthly partitions + 5 indexes
+  - `audit_db.py` — asyncpg pool (min=2, max=10), Pydantic models, typed INSERT helpers
+  - `api_server.py` — FastAPI: `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health` + AlertEngine
 - `guardrail-config/`: YAML-based safety rules and system thresholds.
   - `byoc_rules.yaml` — Structured BYOC stop-limits (patterns, enforcement, severity)
   - `hitl_rules.yaml` — Irreversible action patterns with per-rule timeouts

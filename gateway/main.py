@@ -9,6 +9,7 @@ from gateway.core.guardrail import GuardianGuard
 from gateway.core.scanner import PIIScanner
 from gateway.core.hitl import HITLGate
 from gateway.core.byoc import BYOCEngine
+from gateway.core.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,10 @@ HITL_DEFAULT_TIMEOUT = int(os.getenv("HITL_DEFAULT_TIMEOUT", "300"))
 
 # BYOC Configuration
 BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
+
+# Audit Logger Configuration
+GUARD_BACKEND_URL = os.getenv("GUARD_BACKEND_URL", "http://localhost:8000")
+AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", os.path.expanduser("~/.config/aw-aiguard/audit_buffer.jsonl"))
 
 if not TARGET_URL or not API_KEY:
     print("Error: TARGET_API_BASE_URL and TARGET_API_KEY must be set in gateway/.env")
@@ -67,6 +72,12 @@ byoc = BYOCEngine(
     rules_path=BYOC_RULES_PATH
 )
 
+# Initialize the Audit Logger
+audit_logger = AuditLogger(
+    backend_url=GUARD_BACKEND_URL,
+    buffer_path=AUDIT_BUFFER_PATH,
+)
+
 # Initialize the Proxy Engine with all security components
 proxy_engine = LLMProxy(
     target_url=TARGET_URL, 
@@ -75,6 +86,7 @@ proxy_engine = LLMProxy(
     scanner=scanner,
     hitl=hitl,
     byoc=byoc,
+    audit_logger=audit_logger,
     scan_sequence=SCAN_SEQUENCE
 )
 
@@ -82,7 +94,9 @@ proxy_engine = LLMProxy(
 async def lifespan(app: FastAPI):
     await proxy_engine.start()
     await hitl.start_cleanup()
+    await audit_logger.start()
     yield
+    await audit_logger.stop()
     await hitl.stop_cleanup()
     await proxy_engine.stop()
 

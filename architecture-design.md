@@ -204,7 +204,7 @@ Each developer or agent instance is provisioned a unique, scoped API key (`Beare
 | **Hot Tier** | PostgreSQL (partitioned on `created_at`) | Real-time dashboards, audit logs, recent safety queries, alert data | 30 Days | Sub-second (Native SQL queries) |
 | **Archive / Cold Tier** | S3 / MinIO / GCS | Long-term compliance, regulatory scans, bulk payload analysis | Indefinite | Minutes (Async export to Parquet/JSONL) |
 
-*Implementation:* Postgres utilizes partitioning based on the daily date of incoming audit logs (via `pg_partman` or native SQL DDL). Once a partition exceeds 30 days, an async background job archives it to highly compressed Cloud Storage and drops the table from Postgres.
+*Implementation:* Postgres utilizes monthly partitioning on `audit_logs.created_at` via native SQL DDL (`PARTITION BY RANGE`). Implemented in Phase 2.1 (`migrations/001_initial.sql`). Partition lifecycle management (archive >30 days to MinIO, drop from Postgres) is planned for Phase 2.4.
 
 ### C. BYOC Rule Layer — Stop-Limits (New in v1.1)
 
@@ -354,11 +354,13 @@ aw-aiguard/
 │     └── guardrail.py        # HTTP adapter for the cloud Guardian server
 │     └── scan_secrets.py     # Regex/Entropy PII and secret detection
 │     └── hitl_gate.py        # Human-in-the-loop middleware for irreversible actions [NEW]
-├── central-service/          # The centralized Postgres + MinIO API
-│     └── deploy.yml          # Docker Compose for easy local/network deployment
-│     └── api_server.py       # Settings sync endpoint + async log receiver
-│     └── provenance_db.py    # Provenance tagging schema + enforcement [NEW]
-│     └── alert_engine.py     # Webhooks to Slack / Telegram when score == "no"
+│     └── byoc.py             # BYOC stop-limits enforcement engine [Phase 1.6]
+│     └── block.py            # Standardized 403 block response generator [Phase 1.6]
+├── central-service/          # The centralized Postgres + MinIO API [Phase 2.1 ✅]
+│     └── docker-compose.yml  # Docker Compose: Postgres 16 + MinIO + API server
+│     └── api_server.py       # Settings sync endpoint + async log receiver + AlertEngine
+│     └── audit_db.py         # asyncpg pool + typed INSERT helpers + Pydantic models
+│     └── migrations/         # SQL init scripts (001_initial.sql: 4 tables + partitions + indexes)
 ├── guardrail-config/         # BYOC rule engine for stop-limits and HITL config [NEW]
 │     └── byoc_rules.yaml     # Never-do-this rules, threshold configs  
 `-- docs/                     # Architecture specs and per-developer YAML config templates
@@ -368,10 +370,12 @@ aw-aiguard/
 
 | Priority | Task | Target | Notes |
 |---|---|---|---|
-| P0 | Core proxy on `localhost:9020` with Guardian pre-flight gate (Section 3.1) | Sprint 1 | Foundation for all other features — must be first |
-| P0 | HITL middleware for irreversible actions (Section 3.4) | Sprint 1–2 | Pre-MVP requirement; blocks before prod deployment |
+| P0 | Core proxy on `localhost:9020` with Guardian pre-flight gate (Section 3.1) | ✅ Done | Foundation for all other features |
+| P0 | HITL middleware for irreversible actions (Section 3.4) | ✅ Done | Pre-MVP requirement |
+| P0 | HITL resume flow + BYOC engine (Phase 1.6 gap fixes) | ✅ Done | Full HITL cycle + stop-limits |
 | P1 | Post-processing thinking-mode verification (Section 4, Layer 3) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
-| P2 | Provenance tagging schema + enforcement (Section 5) | Phase 2 | Pairs with audit infrastructure; enables trust-gated operations for Phase 3 BYOC |
-| P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal of untrusted data flowing into sensitive operations |
-| P2 | BYOC stop-limits engine (Section 6C) | Sprint 3 | Codifies "never do this" rules as hard enforcement boundary |
+| P2 | Central backend deployment (Phase 2.1) | ✅ Done | PostgreSQL + MinIO + API server (Docker Compose) |
+| P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
+| P2 | Provenance tagging schema + enforcement (Section 5) | Planned (Phase 2.5) | Pairs with audit infrastructure |
+| P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal |
 | P2 | Data/command separation schemas (Section 3.5) | Sprint 3 | Validate all tool-call parameters against typed JSON schema |

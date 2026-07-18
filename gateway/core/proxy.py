@@ -2,6 +2,7 @@ import httpx
 import logging
 import json
 import asyncio
+import hashlib
 from typing import AsyncGenerator, Optional
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,7 @@ from gateway.core.scanner import PIIScanner
 from gateway.core.hitl import HITLGate, HitlDecision, RequestContext
 from gateway.core.block import generate_block_response, BlockReason
 from gateway.core.byoc import BYOCEngine, BYOCCheckResult
+from gateway.core.audit import AuditLogger
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +32,7 @@ class LLMProxy:
         scanner: Optional[PIIScanner] = None,
         hitl: Optional[HITLGate] = None,
         byoc: Optional[BYOCEngine] = None,
+        audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "A"
     ):
         self.target_url = target_url.rstrip("/")
@@ -38,6 +41,7 @@ class LLMProxy:
         self.scanner = scanner
         self.hitl = hitl
         self.byoc = byoc
+        self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
 
@@ -82,6 +86,10 @@ class LLMProxy:
         safety_decision = SafetyDecision.ALLOW
         scan_decision = SafetyDecision.ALLOW
         current_content = content
+        component_name = "proxy"
+        reason_message = "Passed all checks"
+        blocked_by_name = None
+        hitl_request_id = None
         
         # Extract prompt for security checks
         prompt = ""
@@ -96,8 +104,11 @@ class LLMProxy:
             except json.JSONDecodeError:
                 logger.debug("Request body not JSON; skipping prompt extraction for security checks.")
 
+        # Prompt hash for audit logging (computed once, reused)
+        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:64] if prompt else None
+
         # --- Security Pipeline Execution ---
-        # Pipeline Order: Guardian -> PII Scan -> HITL (Post-Security) -> Forward
+        # Pipeline Order: Guardian -> PII Scan -> HITL -> BYOC -> Forward
 
         # Step 1 & 2: Guardian + PII Scan (security layers before HITL)
         if prompt:
@@ -106,6 +117,13 @@ class LLMProxy:
                 if self.guardian:
                     safety_decision = await self.guardian.check_safety(prompt)
                     if safety_decision == SafetyDecision.BLOCK:
+                        component_name = "guardian"
+                        blocked_by_name = "guardian"
+                        await self.audit_logger.log_inline(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Safety violation", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
                             message="Request blocked by aw-aiguard security policy.",
@@ -115,6 +133,13 @@ class LLMProxy:
                 if self.scanner:
                     redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
                     if scan_decision == SafetyDecision.BLOCK:
+                        component_name = "pii_scanner"
+                        blocked_by_name = "pii_scanner"
+                        await self.audit_logger.log_inline(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Critical secret detected", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
                             message="Request blocked by aw-aiguard security policy.",
@@ -126,6 +151,13 @@ class LLMProxy:
                 if self.scanner:
                     redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
                     if scan_decision == SafetyDecision.BLOCK:
+                        component_name = "pii_scanner"
+                        blocked_by_name = "pii_scanner"
+                        await self.audit_logger.log_inline(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Critical secret detected", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
                             message="Request blocked by aw-aiguard security policy.",
@@ -137,6 +169,13 @@ class LLMProxy:
                 if self.guardian:
                     safety_decision = await self.guardian.check_safety(prompt)
                     if safety_decision == SafetyDecision.BLOCK:
+                        component_name = "guardian"
+                        blocked_by_name = "guardian"
+                        await self.audit_logger.log_inline(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Safety violation", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
                             message="Request blocked by aw-aiguard security policy.",
@@ -152,11 +191,17 @@ class LLMProxy:
                 headers=dict(request.headers),
                 body=current_content,
             )
-            hitl_decision, request_id = await self.hitl.check_hitl(prompt, request_context=request_context)
+            hitl_decision, hitl_request_id = await self.hitl.check_hitl(prompt, request_context=request_context)
             if hitl_decision == HitlDecision.PAUSE:
+                component_name = "hitl_gate"
+                await self.audit_logger.log_inline(
+                    self.api_key, "pause", component_name, prompt,
+                    reason="Irreversible action detected", request_id=hitl_request_id,
+                    prompt_hash=prompt_hash,
+                ) if self.audit_logger else None
                 return Response(
                     content=json.dumps({
-                        "request_id": request_id,
+                        "request_id": hitl_request_id,
                         "status": "pending_approval",
                         "message": "Request paused for human approval."
                     }),
@@ -169,11 +214,24 @@ class LLMProxy:
         if prompt and self.byoc:
             byoc_result = self.byoc.check(prompt, self.api_key)
             if byoc_result.decision == SafetyDecision.BLOCK:
+                component_name = "byoc_engine"
+                blocked_by_name = "byoc_engine"
+                await self.audit_logger.log_inline(
+                    self.api_key, "block", component_name, prompt,
+                    reason=byoc_result.message, blocked_by=blocked_by_name,
+                    prompt_hash=prompt_hash,
+                ) if self.audit_logger else None
                 return generate_block_response(
                     reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
                     message=byoc_result.message,
                     blocked_by="byoc_engine",
                 )
+            elif byoc_result.decision == SafetyDecision.WARNING:
+                # BYOC warning — log but continue
+                await self.audit_logger.log_inline(
+                    self.api_key, "warn", "byoc_engine", prompt,
+                    reason=byoc_result.message, prompt_hash=prompt_hash,
+                ) if self.audit_logger else None
 
         # Final decision for header tagging (Warning if either flagged)
         final_decision = SafetyDecision.WARNING if (
@@ -182,6 +240,18 @@ class LLMProxy:
             or (byoc_result and byoc_result.decision == SafetyDecision.WARNING)
         ) else SafetyDecision.ALLOW
         headers = self._prepare_headers(request.headers, final_decision)
+        
+        # Log warnings from Guardian or PII scanner (non-blocking)
+        if safety_decision == SafetyDecision.WARNING:
+            await self.audit_logger.log_inline(
+                self.api_key, "warn", "guardian", prompt,
+                reason="Guardian warn (fail-safe)", prompt_hash=prompt_hash,
+            ) if self.audit_logger else None
+        elif scan_decision == SafetyDecision.WARNING:
+            await self.audit_logger.log_inline(
+                self.api_key, "warn", "pii_scanner", prompt,
+                reason="PII scanner warn", prompt_hash=prompt_hash,
+            ) if self.audit_logger else None
         
         # Handle streaming logic
         is_streaming = False
@@ -195,8 +265,16 @@ class LLMProxy:
         
         try:
             if is_streaming:
-                return await self._handle_streaming(method, url, headers, current_content)
-            return await self._handle_standard(method, url, headers, current_content)
+                response = await self._handle_streaming(method, url, headers, current_content)
+            else:
+                response = await self._handle_standard(method, url, headers, current_content)
+            
+            # Final ALLOW — log that the request passed all checks and was forwarded
+            await self.audit_logger.log_inline(
+                self.api_key, "allow", component_name, prompt,
+                reason=reason_message, prompt_hash=prompt_hash,
+            ) if self.audit_logger else None
+            return response
         except httpx.RequestError as exc:
             logger.error(f"Network error forwarding {method} {path}: {exc}")
             return Response(content="Bad Gateway: Could not reach LLM provider", status_code=502)
@@ -241,13 +319,23 @@ class LLMProxy:
         headers.pop("content-length", None)
 
         is_streaming = False
+        prompt = ""
         if ctx.body:
             try:
                 body = json.loads(ctx.body)
                 if isinstance(body, dict):
                     is_streaming = body.get("stream", False)
+                    messages = body.get("messages", [])
+                    if messages and isinstance(messages, list):
+                        prompt = messages[-1].get("content", "")
             except json.JSONDecodeError:
                 pass
+
+        # Log HITL resume — the request was approved and is now being forwarded
+        await self.audit_logger.log_inline(
+            self.api_key, "allow", "hitl_gate", prompt,
+            reason="HITL approved — request resumed",
+        ) if self.audit_logger else None
 
         try:
             if is_streaming:
