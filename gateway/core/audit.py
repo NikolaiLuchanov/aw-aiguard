@@ -11,26 +11,14 @@ import json
 import asyncio
 import logging
 import hashlib
-from typing import Any, Dict, Literal, Optional
+from typing import Optional
 
 import aiofiles
 import httpx
-from pydantic import BaseModel
+
+from shared.schemas import AuditEvent
 
 logger = logging.getLogger("aw-aiguard.audit")
-
-
-class AuditEvent(BaseModel):
-    """An audit event pushed to the backend (matches central-service/audit_db.py)."""
-    api_key: str
-    event_type: Literal["allow", "block", "warn", "pause"]
-    component: str  # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
-    reason: Optional[str] = None
-    prompt_hash: Optional[str] = None
-    provenance: Optional[Dict[str, Any]] = None
-    blocked_by: Optional[str] = None
-    request_id: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
 
 
 class AuditLogger:

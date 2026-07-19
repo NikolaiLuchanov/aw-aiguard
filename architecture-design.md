@@ -382,22 +382,33 @@ To move from architecture to implementation:
 To start building, here is the recommended codebase layout:
 ```text
 aw-aiguard/
-├── gateway/                  # The Local Guardrail Proxy (FastAPI / Node)
+├── gateway/                  # The Local Guardrail Proxy (FastAPI)
+│     ├── main.py             # FastAPI app with wildcard routing + HITL endpoints
+│     ├── README.md           # Gateway documentation + curl examples
+│     ├── .env.example        # Environment variable template
 │     └── core/
-│         └── proxy.py        # Core reverse proxy on localhost:9020
-│         └── guardrail.py    # HTTP adapter for the cloud Guardian server
-│         └── scanner.py      # Regex/Entropy PII and secret detection
-│         └── hitl.py         # Human-in-the-loop middleware for irreversible actions [NEW]
-│         └── byoc.py         # BYOC stop-limits enforcement engine [Phase 1.6]
-│         └── block.py        # Standardized 403 block response generator [Phase 1.6]
+│         ├── proxy.py        # Core reverse proxy on localhost:9020
+│         ├── guardrail.py    # HTTP adapter for the cloud Guardian server
+│         ├── scanner.py      # Regex/Entropy PII and secret detection
+│         ├── hitl.py         # Human-in-the-loop middleware for irreversible actions
+│         ├── byoc.py         # BYOC stop-limits enforcement engine
+│         ├── block.py        # Standardized 403 block response generator
+│         └── audit.py        # Async audit logger (queue → backend, JSONL fallback)
 ├── central-service/          # The centralized Postgres + MinIO API [Phase 2.1 ✅]
-│     └── docker-compose.yml  # Docker Compose: Postgres 16 + MinIO + API server
-│     └── api_server.py       # Settings sync endpoint + async log receiver + AlertEngine
-│     └── audit_db.py         # asyncpg pool + typed INSERT helpers + Pydantic models
-│     └── migrations/         # SQL init scripts (001_initial.sql: 4 tables + partitions + indexes)
-├── guardrail-config/         # BYOC rule engine for stop-limits and HITL config [NEW]
-│     └── byoc_rules.yaml     # Never-do-this rules, threshold configs  
-`-- docs/                     # Architecture specs and per-developer YAML config templates
+│     ├── docker-compose.yml  # Docker Compose: Postgres 16 + MinIO + API server
+│     ├── Dockerfile          # Python 3.9 slim, installs deps, runs uvicorn
+│     ├── api_server.py       # FastAPI: audit log receiver + settings sync + alert dispatch
+│     ├── audit_db.py         # asyncpg pool (min=2, max=10), typed INSERT helpers
+│     ├── alert_engine.py     # Multi-channel alert dispatch (Telegram, Slack, Email)
+│     ├── .env.example        # Backend environment variable template
+│     └── migrations/
+│         └── 001_initial.sql # Schema: 4 tables + 3 monthly partitions + 5 indexes
+├── guardrail-config/         # YAML-based safety rules and system thresholds
+│     ├── byoc_rules.yaml     # BYOC stop-limits (patterns, enforcement, severity)
+│     ├── hitl_rules.yaml     # Irreversible action patterns with per-rule timeouts
+│     ├── scan_rules.yaml     # PII/Secrets detection rules (block, redact, warn, ignore)
+│     └── settings.yaml       # Guardian thresholds, safety mode, alert channels
+└── docs/                     # Architecture specs and implementation plans
 ```
 
 **Priority-ordered Phase 1 tasks:**

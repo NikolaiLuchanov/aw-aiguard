@@ -6,41 +6,15 @@ for audit_logs, provenance, and settings_history tables.
 """
 
 import os
+import sys
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 import asyncpg
-from pydantic import BaseModel
+
+from shared.schemas import AuditEvent, ProvenanceEvent, SettingsChange
 
 logger = logging.getLogger(__name__)
-
-
-class AuditEvent(BaseModel):
-    api_key: str
-    event_type: Literal["allow", "block", "warn", "pause"]
-    component: str   # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
-    reason: Optional[str] = None
-    prompt_hash: Optional[str] = None
-    provenance: Optional[Dict[str, Any]] = None
-    blocked_by: Optional[str] = None
-    request_id: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
-
-
-class ProvenanceEvent(BaseModel):
-    source_id: str
-    source_type: str
-    trust_level: float
-    ingested_at: Optional[datetime] = None  # Defaults to NOW() in DB
-
-
-class SettingsChange(BaseModel):
-    developer_id: str
-    setting_key: str
-    old_value: Optional[str] = None
-    new_value: Optional[str] = None
-    sync_source: str = "local"  # 'local', 'backend', 'auto'
 
 
 # Default settings per architecture spec
