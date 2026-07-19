@@ -8,7 +8,7 @@ for audit_logs, provenance, and settings_history tables.
 import os
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import asyncpg
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class AuditEvent(BaseModel):
     api_key: str
-    event_type: str  # 'allow', 'block', 'warn', 'pause'
+    event_type: Literal["allow", "block", "warn", "pause"]
     component: str   # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
     reason: Optional[str] = None
     prompt_hash: Optional[str] = None

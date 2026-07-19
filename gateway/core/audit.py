@@ -11,40 +11,26 @@ import json
 import asyncio
 import logging
 import hashlib
-from typing import Optional
-from dataclasses import dataclass, field
+from typing import Any, Dict, Literal, Optional
 
 import aiofiles
 import httpx
+from pydantic import BaseModel
 
 logger = logging.getLogger("aw-aiguard.audit")
 
 
-@dataclass
-class AuditEvent:
-    """An audit event pushed to the backend."""
+class AuditEvent(BaseModel):
+    """An audit event pushed to the backend (matches central-service/audit_db.py)."""
     api_key: str
-    event_type: str  # 'allow', 'block', 'warn', 'pause'
-    component: str   # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
+    event_type: Literal["allow", "block", "warn", "pause"]
+    component: str  # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
     reason: Optional[str] = None
     prompt_hash: Optional[str] = None
-    provenance: Optional[dict] = None
+    provenance: Optional[Dict[str, Any]] = None
     blocked_by: Optional[str] = None
     request_id: Optional[str] = None
-    details: Optional[dict] = None
-
-    def to_dict(self) -> dict:
-        return {
-            "api_key": self.api_key,
-            "event_type": self.event_type,
-            "component": self.component,
-            "reason": self.reason,
-            "prompt_hash": self.prompt_hash,
-            "provenance": self.provenance,
-            "blocked_by": self.blocked_by,
-            "request_id": self.request_id,
-            "details": self.details,
-        }
+    details: Optional[Dict[str, Any]] = None
 
 
 class AuditLogger:
@@ -164,7 +150,7 @@ class AuditLogger:
                 try:
                     resp = await self._client.post(
                         f"{self.backend_url}/audit/batch",
-                        json=[e.to_dict() for e in events],
+                        json=[e.model_dump() for e in events],
                     )
                     if resp.status_code == 200:
                         self._backend_reachable = True
@@ -196,7 +182,7 @@ class AuditLogger:
         try:
             async with aiofiles.open(self.buffer_path, "a") as f:
                 for event in events:
-                    await f.write(json.dumps(event.to_dict()) + "\n")
+                    await f.write(json.dumps(event.model_dump()) + "\n")
             logger.info("Buffered %d events to %s", len(events), self.buffer_path)
         except Exception:
             logger.exception("Failed to write audit buffer")
@@ -254,7 +240,7 @@ class AuditLogger:
         try:
             await self._client.post(
                 f"{self.backend_url}/audit/batch",
-                json=[e.to_dict() for e in remaining],
+                json=[e.model_dump() for e in remaining],
             )
         except Exception:
             # Last resort: write to buffer

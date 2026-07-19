@@ -19,10 +19,10 @@
 
 **Note on Backend Dependency:** Phase 1.3 implements the *client-side* logic for the Guardian pre-flight gate. The *server-side* implementation (the containerized Central Service) is the primary focus of Phase 2. During Phase 1.3, verification is performed using fail-safe strategies and mock servers to validate the proxy's robustness before the full backend is deployed.
 
-- [ ] **1.1 Project Scaffolding**
+- [x] **1.1 Project Scaffolding**
     - Initialize directory structure: `gateway/`, `central-service/`, `guardrail-config/`.
     - Set up Python virtual environment and dependency management (`pyproject.toml` or `requirements.txt`).
-- [ ] **1.2 Basic Pass-Through Proxy**
+- [x] **1.2 Basic Pass-Through Proxy**
     - Implement FastAPI server on `localhost:9020`.
     - Build an Anthropic/OpenAI compatible reverse proxy that forwards requests to cloud APIs.
 - [ ] **1.3 Guardian Pre-flight Gate**
@@ -35,7 +35,7 @@
     - Action-based rules from `guardrail-config/scan_rules.yaml`: `redact`, `block`, `warn`, `ignore`.
     - Sequence control via `SCAN_SEQUENCE` (A: Guardian→PII, B: PII→Guardian default, C: parallel opt-in).
     - Action mode override via `SCAN_ACTION_MODE` (`block` or `warn` to down-grade).
-- [ ] **1.5 HITL "Pause" Middleware (P0 Requirement)**
+- [x] **1.5 HITL "Pause" Middleware (P0 Requirement)**
     - Implement the interception logic for irreversible tool calls (e.g., delete, send email, commit code).
     - Logic: Match irreversible pattern $\\rightarrow$ Mark status as `pending_approval` $\\rightarrow$ Return `pending` response to agent.
 - [x] **1.6 Basic Block Responses**

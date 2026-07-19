@@ -1,6 +1,6 @@
 # BYOC (Bring Your Own Criteria) Stop-Limits
 # These are hard boundaries that no model decision can override.
-# Enforcement hierarchy: BYOC applies AFTER Guardian, PII, and HITL checks.
+# Enforcement hierarchy: BYOC applies AFTER Guardian and PII checks, BEFORE HITL.
 # - hard_stop: immediate block, no override
 # - soft_block: Guardian alert + log warning
 

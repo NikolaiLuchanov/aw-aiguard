@@ -1,6 +1,6 @@
 # aw-aiguard Local Gateway Proxy
 
-This is the **P0 Edge Layer** of the aw-aiguard system. It acts as a bi-directional, stateless, asynchronous reverse proxy that intercepts all LLM traffic on your local machine—both outgoing requests and incoming responses.
+This is the **P0 Edge Layer** of the aw-aiguard system. It acts as a stateless, asynchronous reverse proxy that intercepts outgoing LLM traffic on your local machine. Incoming LLM responses pass through unmodified (bi-directional scanning is planned for v2.0).
 
 ## 🚀 Quick Start
 
@@ -42,11 +42,11 @@ The proxy implements a full round-trip flow to ensure security at both ends of t
 1. **Interception**: Captures the user prompt from the Agent.
 2. **PII Scan**: (Phase 1.4) Scans for secrets/PII — blocks (403) if `SCAN_ACTION_MODE=block`, or warns and redacts if `SCAN_ACTION_MODE=warn`.
 3. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
-4. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
-5. **BYOC Stop-Limits**: (Phase 1.6+) Final enforcement layer — applies "never do this" rules after all other checks pass.
+4. **BYOC Stop-Limits**: (Phase 1.6+) Final enforcement layer — applies "never do this" rules after PII and Guardian checks.
+5. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
 6. **Forwarding**: Sends the request to the Cloud LLM provider.
-7. **Post-Processing**: (Phase 1.4+) Scans the LLM's response for leaked secrets or dangerous content.
-8. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
+7. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
+8. **Post-Processing**: *(Roadmap v2.0)* Scans the LLM's response for leaked secrets or dangerous content.
 
 ### The `GuardianGuard` Adapter
 The `GuardianGuard` is a robust adapter that mediates between the local proxy and the Cloud Guardian Model Server. It is designed for high reliability and zero-trust.

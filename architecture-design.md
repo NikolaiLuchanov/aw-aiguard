@@ -366,7 +366,7 @@ To move from architecture to implementation:
 1. **Cowork Bridge:** We intercept Cowork by configuring Claude Desktop's `claude_desktop_config.json` (or similar environment variable) to route its internal model calls straight through `localhost:9020`. This acts as a pure file-based HTTP proxy without needing to write reverse-engineering glue code to watch directory JSON dumps.
 2. **Guardrail Confidence Thresholds:** Fully settings-driven per the table in Section 9 (e.g., changing `llm_safety_mode` from `hard_block` to `warn_only`). 
 3. **Runtime Architecture (Local Proxy vs Central Backend):** 
-### 307. Runtime Architecture (Native Proxy $\leftrightarrow$ Cloud Backend)
+### 10.C. Runtime Architecture (Native Proxy ↔ Cloud Backend)
 - **Local Gateway (The Performance Edge):**
     - **What it does:** Real-time JSON interception, remote Granite 4.1 Guardian scoring, and immediate blocking/pass-through.
     - **Best Runtime:** **Native Process (Python/FastAPI).** This avoids Docker virtualization overhead on macOS, ensuring the lowest possible latency for the interception point.
@@ -383,12 +383,13 @@ To start building, here is the recommended codebase layout:
 ```text
 aw-aiguard/
 ├── gateway/                  # The Local Guardrail Proxy (FastAPI / Node)
-│     └── main.py             # Core reverse proxy on localhost:9020
-│     └── guardrail.py        # HTTP adapter for the cloud Guardian server
-│     └── scan_secrets.py     # Regex/Entropy PII and secret detection
-│     └── hitl_gate.py        # Human-in-the-loop middleware for irreversible actions [NEW]
-│     └── byoc.py             # BYOC stop-limits enforcement engine [Phase 1.6]
-│     └── block.py            # Standardized 403 block response generator [Phase 1.6]
+│     └── core/
+│         └── proxy.py        # Core reverse proxy on localhost:9020
+│         └── guardrail.py    # HTTP adapter for the cloud Guardian server
+│         └── scanner.py      # Regex/Entropy PII and secret detection
+│         └── hitl.py         # Human-in-the-loop middleware for irreversible actions [NEW]
+│         └── byoc.py         # BYOC stop-limits enforcement engine [Phase 1.6]
+│         └── block.py        # Standardized 403 block response generator [Phase 1.6]
 ├── central-service/          # The centralized Postgres + MinIO API [Phase 2.1 ✅]
 │     └── docker-compose.yml  # Docker Compose: Postgres 16 + MinIO + API server
 │     └── api_server.py       # Settings sync endpoint + async log receiver + AlertEngine
