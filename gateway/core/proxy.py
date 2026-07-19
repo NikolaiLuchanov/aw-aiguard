@@ -33,7 +33,7 @@ class LLMProxy:
         hitl: Optional[HITLGate] = None,
         byoc: Optional[BYOCEngine] = None,
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
-        scan_sequence: str = "A"
+        scan_sequence: str = "B"
     ):
         self.target_url = target_url.rstrip("/")
         self.api_key = api_key
@@ -108,18 +108,19 @@ class LLMProxy:
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:64] if prompt else None
 
         # --- Security Pipeline Execution ---
-        # Pipeline Order: Guardian -> PII Scan -> HITL -> BYOC -> Forward
+        # Pipeline Order (Layer 1→5): PII Scan → Guardian → BYOC → HITL → Forward
 
-        # Step 1 & 2: Guardian + PII Scan (security layers before HITL)
+        # Layer 1 & 2: PII Scan + Guardian (Sequence A/B/C)
         if prompt:
             if self.scan_sequence == "A":
-                # SEQUENCE A: Guardian -> PII
+                # SEQUENCE A: Guardian (L2) → PII (L1)
+                # Guardian sees raw prompt; PII runs after.
                 if self.guardian:
                     safety_decision = await self.guardian.check_safety(prompt)
                     if safety_decision == SafetyDecision.BLOCK:
                         component_name = "guardian"
                         blocked_by_name = "guardian"
-                        await self.audit_logger.log_inline(
+                        await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
                             prompt_hash=prompt_hash,
@@ -135,7 +136,78 @@ class LLMProxy:
                     if scan_decision == SafetyDecision.BLOCK:
                         component_name = "pii_scanner"
                         blocked_by_name = "pii_scanner"
-                        await self.audit_logger.log_inline(
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Critical secret detected", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
+                        return generate_block_response(
+                            reason=BlockReason.CRITICAL_SECRET_DETECTED,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="pii_scanner",
+                        )
+                    current_content = self._update_body_prompt(content, redacted)
+            elif self.scan_sequence == "C":
+                # SEQUENCE C (opt-in): Guardian (L2) + PII (L1) in parallel.
+                # Guardian sees the raw prompt — trades privacy for lower latency.
+                # Only use when PII privacy is not a concern and throughput matters.
+                if self.guardian and self.scanner:
+                    safety_result, (redacted, scan_decision) = await asyncio.gather(
+                        self.guardian.check_safety(prompt),
+                        asyncio.to_thread(self.scanner.scan_text, prompt),
+                    )
+                    safety_decision = safety_result
+
+                    # Check block decisions (Guardian first, then PII)
+                    if safety_decision == SafetyDecision.BLOCK:
+                        component_name = "guardian"
+                        blocked_by_name = "guardian"
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Safety violation", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
+                        return generate_block_response(
+                            reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="guardian",
+                        )
+
+                    if scan_decision == SafetyDecision.BLOCK:
+                        component_name = "pii_scanner"
+                        blocked_by_name = "pii_scanner"
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Critical secret detected", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
+                        return generate_block_response(
+                            reason=BlockReason.CRITICAL_SECRET_DETECTED,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="pii_scanner",
+                        )
+                    current_content = self._update_body_prompt(content, redacted)
+                elif self.guardian:
+                    safety_decision = await self.guardian.check_safety(prompt)
+                    if safety_decision == SafetyDecision.BLOCK:
+                        component_name = "guardian"
+                        blocked_by_name = "guardian"
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", component_name, prompt,
+                            reason="Safety violation", blocked_by=blocked_by_name,
+                            prompt_hash=prompt_hash,
+                        ) if self.audit_logger else None
+                        return generate_block_response(
+                            reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                            message="Request blocked by aw-aiguard security policy.",
+                            blocked_by="guardian",
+                        )
+                elif self.scanner:
+                    redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
+                    if scan_decision == SafetyDecision.BLOCK:
+                        component_name = "pii_scanner"
+                        blocked_by_name = "pii_scanner"
+                        await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
                             prompt_hash=prompt_hash,
@@ -147,13 +219,14 @@ class LLMProxy:
                         )
                     current_content = self._update_body_prompt(content, redacted)
             else:
-                # SEQUENCE B: PII -> Guardian
+                # SEQUENCE B (default): PII (L1) → Guardian (L2)
+                # Guardian only sees the redacted prompt — protects secret privacy.
                 if self.scanner:
                     redacted, scan_decision = await asyncio.to_thread(self.scanner.scan_text, prompt)
                     if scan_decision == SafetyDecision.BLOCK:
                         component_name = "pii_scanner"
                         blocked_by_name = "pii_scanner"
-                        await self.audit_logger.log_inline(
+                        await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
                             prompt_hash=prompt_hash,
@@ -171,7 +244,7 @@ class LLMProxy:
                     if safety_decision == SafetyDecision.BLOCK:
                         component_name = "guardian"
                         blocked_by_name = "guardian"
-                        await self.audit_logger.log_inline(
+                        await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
                             prompt_hash=prompt_hash,
@@ -182,7 +255,31 @@ class LLMProxy:
                             blocked_by="guardian",
                         )
 
-        # Step 3: Post-Security HITL Check (after Guardian + PII have cleared the request)
+        # Layer 3: BYOC Stop-Limits (final authority — after PII + Guardian)
+        byoc_result: Optional[BYOCCheckResult] = None
+        if prompt and self.byoc:
+            byoc_result = self.byoc.check(prompt, self.api_key)
+            if byoc_result.decision == SafetyDecision.BLOCK:
+                component_name = "byoc_engine"
+                blocked_by_name = "byoc_engine"
+                await self.audit_logger.log_event(
+                    self.api_key, "block", component_name, prompt,
+                    reason=byoc_result.message, blocked_by=blocked_by_name,
+                    prompt_hash=prompt_hash,
+                ) if self.audit_logger else None
+                return generate_block_response(
+                    reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
+                    message=byoc_result.message,
+                    blocked_by="byoc_engine",
+                )
+            elif byoc_result.decision == SafetyDecision.WARNING:
+                # BYOC warning — log but continue
+                await self.audit_logger.log_event(
+                    self.api_key, "warn", "byoc_engine", prompt,
+                    reason=byoc_result.message, prompt_hash=prompt_hash,
+                ) if self.audit_logger else None
+
+        # Layer 4: HITL Check (after PII + Guardian + BYOC have cleared the request)
         if prompt and self.hitl:
             # Build request context for HITL resume (store full request for replay after approval)
             request_context = RequestContext(
@@ -194,7 +291,7 @@ class LLMProxy:
             hitl_decision, hitl_request_id = await self.hitl.check_hitl(prompt, request_context=request_context)
             if hitl_decision == HitlDecision.PAUSE:
                 component_name = "hitl_gate"
-                await self.audit_logger.log_inline(
+                await self.audit_logger.log_event(
                     self.api_key, "pause", component_name, prompt,
                     reason="Irreversible action detected", request_id=hitl_request_id,
                     prompt_hash=prompt_hash,
@@ -209,30 +306,6 @@ class LLMProxy:
                     media_type="application/json"
                 )
 
-        # Step 4: BYOC Stop-Limits (final authority — after all other checks)
-        byoc_result: Optional[BYOCCheckResult] = None
-        if prompt and self.byoc:
-            byoc_result = self.byoc.check(prompt, self.api_key)
-            if byoc_result.decision == SafetyDecision.BLOCK:
-                component_name = "byoc_engine"
-                blocked_by_name = "byoc_engine"
-                await self.audit_logger.log_inline(
-                    self.api_key, "block", component_name, prompt,
-                    reason=byoc_result.message, blocked_by=blocked_by_name,
-                    prompt_hash=prompt_hash,
-                ) if self.audit_logger else None
-                return generate_block_response(
-                    reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
-                    message=byoc_result.message,
-                    blocked_by="byoc_engine",
-                )
-            elif byoc_result.decision == SafetyDecision.WARNING:
-                # BYOC warning — log but continue
-                await self.audit_logger.log_inline(
-                    self.api_key, "warn", "byoc_engine", prompt,
-                    reason=byoc_result.message, prompt_hash=prompt_hash,
-                ) if self.audit_logger else None
-
         # Final decision for header tagging (Warning if either flagged)
         final_decision = SafetyDecision.WARNING if (
             safety_decision == SafetyDecision.WARNING
@@ -243,12 +316,12 @@ class LLMProxy:
         
         # Log warnings from Guardian or PII scanner (non-blocking)
         if safety_decision == SafetyDecision.WARNING:
-            await self.audit_logger.log_inline(
+            await self.audit_logger.log_event(
                 self.api_key, "warn", "guardian", prompt,
                 reason="Guardian warn (fail-safe)", prompt_hash=prompt_hash,
             ) if self.audit_logger else None
         elif scan_decision == SafetyDecision.WARNING:
-            await self.audit_logger.log_inline(
+            await self.audit_logger.log_event(
                 self.api_key, "warn", "pii_scanner", prompt,
                 reason="PII scanner warn", prompt_hash=prompt_hash,
             ) if self.audit_logger else None
@@ -270,7 +343,7 @@ class LLMProxy:
                 response = await self._handle_standard(method, url, headers, current_content)
             
             # Final ALLOW — log that the request passed all checks and was forwarded
-            await self.audit_logger.log_inline(
+            await self.audit_logger.log_event(
                 self.api_key, "allow", component_name, prompt,
                 reason=reason_message, prompt_hash=prompt_hash,
             ) if self.audit_logger else None
@@ -309,7 +382,7 @@ class LLMProxy:
     async def forward_stored_request(self, ctx: RequestContext) -> Response:
         """
         Forward a previously stored request context (HITL resume flow).
-        Skips all security checks — the request already passed Guardian/PII/HITL.
+        Skips all security checks — the request already passed L1(PII)/L2(Guardian)/L3(BYOC)/L4(HITL).
         """
         if not self.client:
             raise RuntimeError("Proxy client not started. Call start() first.")
@@ -332,7 +405,7 @@ class LLMProxy:
                 pass
 
         # Log HITL resume — the request was approved and is now being forwarded
-        await self.audit_logger.log_inline(
+        await self.audit_logger.log_event(
             self.api_key, "allow", "hitl_gate", prompt,
             reason="HITL approved — request resumed",
         ) if self.audit_logger else None

@@ -2,7 +2,8 @@
 BYOC (Bring Your Own Criteria) Stop-Limits Engine.
 
 Codifies 'never do this' rules as hard enforcement boundaries.
-Enforcement hierarchy: BYOC applies AFTER all other checks (Guardian, PII, HITL) are complete.
+Enforcement hierarchy: BYOC applies AFTER PII scanning (L1) and Guardian scoring (L2),
+and BEFORE HITL (L4). It serves as Layer 3 — the final pre-execution authority.
 """
 
 import re
@@ -22,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 class EnforcementLevel(Enum):
     HARD_STOP = "hard_stop"
-    HITL_GATE = "hitl_gate"
     SOFT_BLOCK = "soft_block"
 
 
@@ -108,15 +108,7 @@ class BYOCEngine:
                         rule_enforcement=rule.enforcement,
                         message=f"Request blocked by BYOC rule '{rule.name}': {rule.description}",
                     )
-                elif rule.enforcement == EnforcementLevel.HITL_GATE:
-                    # HITL-protected rules still pause — this signals the proxy to enforce HITL
-                    # even if the prompt didn't match hitl_rules.yaml patterns
-                    return BYOCCheckResult(
-                        decision=SafetyDecision.WARNING,
-                        rule_name=rule.name,
-                        rule_enforcement=rule.enforcement,
-                        message=f"BYOC rule '{rule.name}' triggered: {rule.description} — requires human approval.",
-                    )
+
                 elif rule.enforcement == EnforcementLevel.SOFT_BLOCK:
                     return BYOCCheckResult(
                         decision=SafetyDecision.WARNING,

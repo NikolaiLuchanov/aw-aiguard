@@ -55,7 +55,7 @@ Every tool uses `localhost:9020` as its API gateway. The proxy acts as an **Anth
        # OR   
    export OPENAI_BASE_URL="http://localhost:9020/v1/compatibility"
     ```
-- **Mechanism:** When Claude Code or Codex fires a JSON request to `.../v1/messages`, the proxy intercepts it locally. The proxy strips the raw `user_input` string, sends it to the **cloud Guardian server** (`GUARDIAN_URL`) via HTTP POST, and receives a `yes`/`no` score:
+- **Mechanism:** When Claude Code or Codex fires a JSON request to `.../v1/messages`, the proxy intercepts it locally. The proxy strips the raw `user_input` string, sends it to the Central Service at `GUARDIAN_URL` (e.g. `http://localhost:8000/guardian`) via HTTP POST, and receives a `yes`/`no` score:
      - `yes`: Forwards the payload natively via HTTP POST to the real Anthropic/OpenAI cloud API. Injects Guardian's safety metadata into response headers (for audit).
      - `no`: Blocks execution locally. Returns an immediate error or safe placeholder (`"[Guardian Warning: Prompt blocked for safety review.]"`). Zero LLM cloud API cost incurred — only the lightweight Guardian HTTP hop is consumed.
 
@@ -104,21 +104,18 @@ The proxy gateway remains the authoritative log of all block events, whereas dir
 
 ---
 
-## 4. Dual-Layer Security & Audit Pipeline
+## 4. Security Pipeline Layers
 
 Option B is designed to handle both real-time blocking and comprehensive post-hoc auditing simultaneously.
 
-### Layer 1: Pre-Flight Safety Gate (Real-Time)
-**Goal:** *Block malicious or harmful intent before execution.*  
-Every single payload hits the guardrail *before* the tool is invoked. The proxy sends the prompt to the **cloud Guardian server**, which scores it. If `granite4.1-guardian` returns `no`, execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
-
-### Layer 2: PII & Secrets Scanning (Integrated in Proxy)
+### Layer 1: PII & Secrets Scanning (Integrated in Proxy)
 **Goal:** *Detect and redact sensitive data before it leaves the local machine, preventing accidental exposures.*
 
 #### Scanning Sequence & Flow
-The proxy supports two configurable sequences to balance security and privacy:
-- **Sequence A (Original-First)**: `Raw Prompt` $\rightarrow$ `Guardian Safety Check` $\rightarrow$ `PII Scanner (Redaction)` $\rightarrow$ `Cloud LLM`. (Allows Guardian to detect "Secret Leakage" attacks).
-- **Sequence B (Redacted-First)**: `Raw Prompt` $\rightarrow$ `PII Scanner (Redaction)` $\rightarrow$ `Guardian Safety Check` $\rightarrow$ `Cloud LLM`. (Ensures Guardian never sees the actual secret).
+The proxy supports three configurable sequences to balance security, privacy, and performance:
+- **Sequence A (Original-First)**: `Raw Prompt` $\\rightarrow$ `Guardian Safety Check` $\\rightarrow$ `PII Scanner (Redaction)` $\\rightarrow$ `Cloud LLM`. (Allows Guardian to detect "Secret Leakage" attacks).
+- **Sequence B (Redacted-First, Default)**: `Raw Prompt` $\\rightarrow$ `PII Scanner (Redaction)` $\\rightarrow$ `Guardian Safety Check` $\\rightarrow$ `Cloud LLM`. (Ensures Guardian never sees the actual secret).
+- **Sequence C (Parallel, opt-in)**: `Raw Prompt` $\\rightarrow$ `Guardian + PII Scanner (via `asyncio.gather()`)` $\\rightarrow$ `Cloud LLM`. (Guardian sees the raw prompt, but both checks run concurrently for lower latency. Use only when secret privacy is not a concern).
 
 #### Action-Based Rule Engine
 Scanning is driven by `scan_rules.yaml` using the following actions:
@@ -142,16 +139,46 @@ This allows the same `scan_rules.yaml` to behave as a strict blocker in producti
 1. Safety happens instantly at the edge (pre-flight). 
 2. Nothing is ever lost from an audit perspective (the log contains both `allow` and `block` events for full traceability).
 
-### Layer 3: Post-Processing Thinking-Mode Verification (New in v1.1)
+### Layer 2: Guardian Pre-Flight Gate (Real-Time)
+**Goal:** *Block malicious or harmful intent before execution.*  
+Every single payload hits the guardrail *before* the tool is invoked. The proxy sends the prompt to the **cloud Guardian server**, which scores it. If `granite4.1-guardian` returns `no`, execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
 
-**Goal:** *Re-evaluate the final LLM output against BYOC (Bring Your Own Criteria) rules using deep reasoning.* 
+### Layer 3: BYOC Stop-Limits (Final Authority)
+
+**Goal:** *Codify explicit "never do this" rules that override any other safety check, including Guardian scores.*
+
+A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no model decision can bypass:
+
+**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
+
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
+
+**Two enforcement levels:**
+- `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
+- `soft_block`: Log warning + alert, request continues (e.g. `max_tool_calls_per_minute`)
+
+### Layer 4: Human-in-the-Loop (HITL) Gate
+
+**Goal:** *Require explicit human approval before any irreversible or outbound action executes.*
+
+**Irreversible action list:** Send email, commit code, delete data/files, make payments, invoke destructive API endpoints, execute shell commands with write/modify side effects, send outbound notifications to external parties.
+
+**Mechanism:** When a tool call matches an irreversible pattern from the BYOC rules, the proxy returns a `pending_approval` status to the calling agent instead of forwarding the request. Execution resumes only when explicit human approval is received within a configurable timeout window (default: 5 minutes; after which the request auto-denies).
+
+**Resume Flow:** When a HITL request is approved, the proxy stores the full original HTTP request (method, URL, headers, body) and re-forwards it to the LLM provider via `POST /hitl/resume/{request_id}` — no client re-submission needed. Denied or expired requests return a `403` with the standardized block error.
+
+**Security rationale:** The most critical safety gap in any LLM security architecture. Prompt injection and hallucination can cause fully autonomous agents to execute destructive commands without detection. HITL ensures no irreversible action occurs without human oversight, regardless of Guardian scores or other safeguards.
+
+### Layer 5: Post-Processing Thinking-Mode Verification (New in v1.1)
+
+**Goal:** *Re-evaluate the final LLM output against BYOC rules using deep reasoning.* 
 
 After the main LLM generates a full response and passes the pre-flight guardrail, run it through **`granite4.1-guardian --think=true`** for an additional safety pass:
 
 - **Thinking mode advantage:** The Guardian model can reason about context, identify subtle injection patterns that evade fast detection, and validate against custom rules specific to your use case. This is the recommended approach for BYOC evaluation where generic safety models are insufficient.
 - **Performance trade-off:** Think mode adds ~2–5x latency vs non-thinking mode (fast). Only apply to high-sensitivity outputs or irreversible tool calls. For standard responses, fast mode pre-flight may be sufficient.
 
-### Layer 3B: OWASP LLM05 — Output Control (New in v1.2)
+### Layer 5B: OWASP LLM05 — Output Control (New in v1.2)
 
 **The gap:** Guardian's pre-flight + post-response checks protect against *harmful intent* injected into the model, but they don't prevent the model from producing *correct-but-wrong output* based on poisoned context. A fact-substituted PR recommendation passes both Guardian gates if Guardian was trained purely on violent/harmful content detection.
 
@@ -181,7 +208,7 @@ Every audit log entry and payload MUST include a `provenance` object with the fo
 
 1. **Pre-ingestion tagging:** All data fetched into your RAG pipeline or context window MUST be tagged with provenance at ingestion time — not retroactively.
 2. **Trust-gated operations:** Low-trust content (e.g., `trust_level < 0.5`) triggers additional Guardian checks, tighter BYOC validation, and mandatory HITL gates before any write/deliver operation.
-3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 3), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
+3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 5), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
 4. **Audit log provenance carry-through:** Every downstream transformation carries the original provenance chain forward so root-cause attribution is always possible.
 
 **Never do this (stop-limits applied to provenance):**
@@ -212,13 +239,12 @@ Each developer or agent instance is provisioned a unique, scoped API key (`Beare
 
 A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-flight gate, HITL middleware, and provenance enforcement. It defines hard boundaries that no model decision can bypass:
 
-**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 4 in the proxy pipeline (after Guardian → PII → HITL).
+**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
 
-**Three enforcement levels:**
+**Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
-- `hitl_gate`: Passes with `WARNING` flag; still subject to HITL pause (e.g. `never_delete`)
 - `soft_block`: Log warning + alert, request continues (e.g. `max_tool_calls_per_minute`)
 
 ---
@@ -262,7 +288,7 @@ Summary defines stored injection as data that *"settles in the agent's memory, a
 
 **Goal:** *Detect and redact sensitive data before it leaves the local machine, preventing accidental exposures.*  
 
-This layer runs *in parallel* with the Guardian safety gate on **every outbound payload** flowing through your `localhost:9020` proxy. It uses a lightweight hybrid approach — regex + lexical pattern matching (zero GPU required) plus an LLM-based fallback for edge cases — to scan request/response bodies for known patterns.
+This layer runs *in the proxy pipeline* alongside the Guardian safety gate. It uses a lightweight hybrid approach — regex + lexical pattern matching (zero GPU required) plus an LLM-based fallback for edge cases — to scan request/response bodies for known patterns.
 
 #### Detection Capabilities
 | Category | What We Scan For | Tooling Approach |
@@ -273,12 +299,19 @@ This layer runs *in parallel* with the Guardian safety gate on **every outbound 
 | **Proprietary Code / Internal URLs** | Private GitHub repos, internal subdomains (`*.internal.company.com`), hardcoded base64 config payloads | Domain allowlisting/blacklisting + static signature matching. |
 
 #### Implementation in the Workflow
-- **Where it lives:** Inside the Proxy Gateway at `localhost:9020`, as an async scan layer executing *in parallel* with (not blocking) the LLM pre-flight check (Guardian). This ensures that even if a prompt contains an accidental AWS key or developer email, we catch and mask it before the token stream hits the cloud APIs — **without adding latency to the LLM call itself**.
-- **Solid Background Thread Pool:** Scanning runs on dedicated background worker threads managed by a bounded FIFO queue. If the thread pool is saturated under heavy load, requests are queued (never dropped). A watchdog thread monitors queue depth and spawns additional workers if latency exceeds 50ms. This ensures zero data loss and predictable throughput even at scale.
-- **Scan Pipeline:**   
-     1. Extract raw JSON body & HTTP headers from the incoming tool call.  
-     2. Run lightweight pattern-matchers (regex + entropy) against every string field in background threads.  
-     3. If a match exceeds a confidence threshold, apply the configured action: **block** (403 if `SCAN_ACTION_MODE=block`), **warn** (log + `WARNING` flag if `SCAN_ACTION_MODE=warn`), or **redact** (in-place masking with `***REDACTED_API_KEY***`). All actions push an async audit log entry.   \n     4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 1) for an LLM-based secondary check on sensitive content.
+- **Where it lives:** Inside the Proxy Gateway at `localhost:9020`, as a scan layer in the sequential pipeline. Execution order is controlled by `SCAN_SEQUENCE`:
+
+  - **Sequence A (Guardian-first):** `Raw Prompt → Guardian → PII Scanner → Cloud LLM`. Guardian sees the raw prompt, which lets it detect "Secret Leakage" attacks.
+  - **Sequence B (PII-first, Default):** `Raw Prompt → PII Scanner (Redaction) → Guardian → Cloud LLM`. Guardian only sees the redacted prompt, protecting secret privacy.
+  - **Sequence C (Parallel, opt-in):** `Raw Prompt → Guardian + PII Scanner (parallel) → Cloud LLM`. Guardian sees the raw prompt, but both checks run concurrently via `asyncio.gather()` for lower latency. Use only when secret privacy is not a concern.
+
+  Scanning runs as a CPU-bound operation via `asyncio.to_thread()`, keeping the asyncio event loop free for I/O-bound Guardian calls.
+
+- **Scan Pipeline:**
+  1. Extract raw JSON body & HTTP headers from the incoming tool call.
+  2. Run lightweight pattern-matchers (regex + entropy) against every string field.
+  3. If a match exceeds a confidence threshold, apply the configured action: **block** (403 if `SCAN_ACTION_MODE=block`), **warn** (log + `WARNING` flag if `SCAN_ACTION_MODE=warn`), or **redact** (in-place masking with `***REDACTED_API_KEY***`). All actions push an async audit log entry.
+  4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 2) for an LLM-based secondary check on sensitive content.
 - **Alerts & Audits:** Any `WARN` flags from PII/Secrets scanning are tagged in the audit table (`audit_tags = pii_detected`, `audit_tags = secret_exposure`). If your alerting channels (Slack, Telegram) support severity levels, these fire as "Warning" alerts rather than hard "Block" alerts — allowing developers to review what was auto-redacted without blocking their work.
 - **Configurability:** You provide an allowlist of safe patterns (e.g., `"example.com"`, `"test-key-*"`) and the proxy skips redaction for those. All other traffic is scanned with aggressive defaults. This is controlled locally by `~/.config/aw-aiguard/scan_rules.yaml` — see Section 10 for synchronization details.
 
@@ -373,7 +406,7 @@ aw-aiguard/
 | P0 | Core proxy on `localhost:9020` with Guardian pre-flight gate (Section 3.1) | ✅ Done | Foundation for all other features |
 | P0 | HITL middleware for irreversible actions (Section 3.4) | ✅ Done | Pre-MVP requirement |
 | P0 | HITL resume flow + BYOC engine (Phase 1.6 gap fixes) | ✅ Done | Full HITL cycle + stop-limits |
-| P1 | Post-processing thinking-mode verification (Section 4, Layer 3) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
+| P1 | Post-processing thinking-mode verification (Section 4, Layer 5) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
 | P2 | Central backend deployment (Phase 2.1) | ✅ Done | PostgreSQL + MinIO + API server (Docker Compose) |
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
 | P2 | Provenance tagging schema + enforcement (Section 5) | Planned (Phase 2.5) | Pairs with audit infrastructure |

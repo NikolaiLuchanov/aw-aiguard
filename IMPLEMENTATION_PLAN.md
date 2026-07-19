@@ -122,7 +122,9 @@
 **Internal Flow:** `Client` $\rightleftharpoons$ `Gateway Proxy (9020)` $\rightleftharpoons$ `Central Service (8000/Cloud)` $\rightleftharpoons$ `LLM Cloud API`.
 
 **Dev $\rightarrow$ Prod Transition:**
-The Gateway Proxy is designed to be stateless. The switch from local development to cloud production is handled exclusively via the `GUARD_BACKEND_URL` environment variable. In Phase 2, the transition occurs when this URL is updated from `localhost:8000` to the deployed cloud endpoint, shifting the audit and configuration load from the local machine to the cloud infrastructure.
+The Gateway Proxy is designed to be stateless. The switch from local development to cloud production is handled exclusively via the `GUARDIAN_URL` environment variable. The audit/backend URL is derived as `os.path.dirname(GUARDIAN_URL)`, so a single change covers both:
+- Dev: `GUARDIAN_URL=http://localhost:8000/guardian` → backend resolves to `http://localhost:8000`
+- Prod: `GUARDIAN_URL=https://api.aw-aiguard.cloud/guardian` → backend resolves to `https://api.aw-aiguard.cloud`
 
 | Component | Technology | Role |
 | :--- | :--- | :--- |

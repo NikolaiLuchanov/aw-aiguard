@@ -108,8 +108,8 @@ try:
         print(f"  Could not get HITL pause (status={r.status_code}) | FAIL")
         failed += 1
 
-    # Test 5: Normal request passes through (no regression)
-    print("\nTest 5: Normal request - No regression")
+    # Test 5: Normal request still works (no regression)
+    print("\n[Test 5] Normal request — no regression")
     r = requests.post("http://localhost:9020/v1/chat/completions",
                       json={"messages": [{"role": "user", "content": "What is 2+2?"}]})
     ok = r.status_code == 200

@@ -19,7 +19,7 @@ The summary defines the threat landscape: **prompt injection** is the #1 LLM ris
 Run your main LLM through a **pre-check + post-check** pattern using Granite4.1 Guardian:
 
 - **Pre-injection check (before any tools execute):** Gate all model output through Guardian in non-thinking fast mode (`--think=false`) to answer "yes/no" on safety criteria. No tool gets triggered until the guardrail passes. This is the P0 foundation of the entire system, implemented first in the local proxy gateway at `localhost:9020`.
-- **Post-processing verification (new in v1.1):** After the LLM generates a full response, run it through Guardian in thinking mode (`--think=true`) to validate against custom **BYOC** (Bring Your Own Criteria) rules unique to your use case. This is **Layer 3** of the architecture — a slower but deeper safety pass that catches subtle injection patterns and BYOC violations that fast-mode misses.
+- **Post-processing verification (new in v1.1):** After the LLM generates a full response, run it through Guardian in thinking mode (`--think=true`) to validate against custom **BYOC** (Bring Your Own Criteria) rules unique to your use case. This is **Layer 5** of the architecture — a slower but deeper safety pass that catches subtle injection patterns and BYOC violations that fast-mode misses.
 - **Performance trade-off:** Think mode adds ~2–5x latency vs non-thinking mode. Apply thinking mode selectively:
   - Fast mode (`--think=false`) suffices for low-trust outputs and standard responses.
   - Thinking mode (`--think=true`) is mandatory for any output derived from unclassified provenance, any irreversible action, or any low-trust source (`trust_level < 0.5`).
@@ -37,7 +37,7 @@ Run your main LLM through a **pre-check + post-check** pattern using Granite4.1 
 Per the summary's golden rule — sever at least one vertex:
 
 - **Segment permissions:** Don't connect your agent to email/repositories/database simultaneously. Give each task flow *only* the tools and access it needs for that specific task. This is enforced by the proxy gateway's routing table and API key scoping.
-- **Scrub secrets from context:** Before feeding any content into the LLM's context window, strip environment variables and secrets. This directly addresses the Microsoft GitHub Action case study in the summary. PII/Secrets scanning runs in parallel as an async background layer — configurable via `SCAN_ACTION_MODE`: in `warn` mode it does not block the LLM call but redacts found patterns (e.g., `***REDACTED_API_KEY***`) and logs warnings; in `block` mode (default) it returns 403 on critical secrets.
+- **Scrub secrets from context:** Before feeding any content into the LLM's context window, strip environment variables and secrets. This directly addresses the Microsoft GitHub Action case study in the summary. PII/Secrets scanning runs as a sequential layer in the proxy pipeline — order controlled by `SCAN_SEQUENCE` (A: Guardian→PII, B: PII→Guardian, default B). Configurable via `SCAN_ACTION_MODE`: in `warn` mode it does not block the LLM call but redacts found patterns (e.g., `***REDACTED_API_KEY***`) and logs warnings; in `block` mode (default) it returns 403 on critical secrets.
 
 ### 4. Architecture-Level Data/Command Separation (CaMeL Approach)
 From the Google DeepMind CaMeL framework referenced in the summary: physically isolate data flows from control flows. Don't let untrusted content influence program logic — use structured schemas for tool calls, don't parse LLM output as executable code or shell commands.
@@ -94,7 +94,7 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 || HITL middleware gate | Human approval UI | Only for irreversible/outbound actions | Final safety gate — no auto-destruction |
 || Post-response filter | Guardian thinking (`--think=true`) | After LLM generates full response | Deep reasoning pass against BYOC rules, subtle injection, trust-level violations |
 || Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
-||| PII/Secrets scanning | Regex + entropy scoring (async) | Parallel to LLM calls | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
+||| PII/Secrets scanning | Regex + entropy scoring (via `asyncio.to_thread()`) | Sequential in pipeline (Sequence A/B/C) | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
 || CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
 || **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
 

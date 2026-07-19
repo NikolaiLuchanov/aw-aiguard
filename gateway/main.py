@@ -27,7 +27,7 @@ GUARDIAN_MODEL = os.getenv("GUARDIAN_MODEL", "granite4.1-guardian")
 GUARDIAN_FAIL_STRATEGY = os.getenv("GUARDIAN_FAIL_STRATEGY", "block")
 
 # PII Scanner Configuration
-SCAN_SEQUENCE = os.getenv("SCAN_SEQUENCE", "A")
+SCAN_SEQUENCE = os.getenv("SCAN_SEQUENCE", "B")
 SCAN_REDACTION_MODE = os.getenv("SCAN_REDACTION_MODE", "token")
 SCAN_ACTION_MODE = os.getenv("SCAN_ACTION_MODE", "block")  # "block" or "warn"
 SCAN_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "scan_rules.yaml")
@@ -39,8 +39,7 @@ HITL_DEFAULT_TIMEOUT = int(os.getenv("HITL_DEFAULT_TIMEOUT", "300"))
 # BYOC Configuration
 BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
 
-# Audit Logger Configuration
-GUARD_BACKEND_URL = os.getenv("GUARD_BACKEND_URL", "http://localhost:8000")
+# Audit Logger Configuration — same Central Service as Guardian
 AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", os.path.expanduser("~/.config/aw-aiguard/audit_buffer.jsonl"))
 
 if not TARGET_URL or not API_KEY:
@@ -74,7 +73,7 @@ byoc = BYOCEngine(
 
 # Initialize the Audit Logger
 audit_logger = AuditLogger(
-    backend_url=GUARD_BACKEND_URL,
+    base_url=GUARDIAN_URL,
     buffer_path=AUDIT_BUFFER_PATH,
 )
 

@@ -76,7 +76,7 @@ flowchart TD
         direction TB
         
         %% Pre-Flight Layer
-        subgraph PreFlight ["Layer 1: Pre-Flight Guardrails (Default: Guardian → PII)"]
+        subgraph PreFlight ["Layer 1: PII & Secrets Scanning (Default: PII → Guardian)"]
             P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
             P1["PII & Secrets Scanning<br/>(SCAN_ACTION_MODE=block)"]
             P3{"Function-Call<br/>Hallucination Check"}
@@ -86,16 +86,16 @@ flowchart TD
         %% Decision Logic
         Decision{"Guardian<br/>Score is NO?"}
     
-        %% HITL Layer
-        subgraph HITL ["Layer 2: Human-in-the-Loop"]
+        %% BYOC Layer (Layer 3)
+        subgraph BYOC ["Layer 3: BYOC Stop-Limits (Final Authority)"]
+            BY1{"BYOC Rule<br/>Violation?"}
+        end
+
+        %% HITL Layer (Layer 4)
+        subgraph HITL ["Layer 4: Human-in-the-Loop"]
             H1{"Irreversible<br/>Action?"}
             H2["Pause for Human<br/>Approval UI"]
             H3["Resume: Re-forward<br/>Stored Request"]
-        end
-    
-        %% BYOC Layer
-        subgraph BYOC ["Layer 3: BYOC Stop-Limits (Final Authority)"]
-            BY1{"BYOC Rule<br/>Violation?"}
         end
 
         %% Execution
@@ -103,7 +103,7 @@ flowchart TD
     end
 
     %% Post-Execution Layer
-    subgraph PostFlight ["Layer 3: Post-Processing"]
+    subgraph PostFlight ["Layer 5: Post-Processing"]
         direction TB
         PF1{"Guardian Think Mode<br/>think=true"}
         PF2["Output Control LLM05<br/>Escaping & Quoting"]
@@ -138,14 +138,14 @@ flowchart TD
     Decision -- Yes --> Alert
     Decision -- Yes --> Block[Block Response]
     
-    %% Pass path
-    Decision -- No --> H1
-    H1 -- No --> BY1
+    %% Pass path (Layer 3: BYOC → Layer 4: HITL → Forward)
+    Decision -- No --> BY1
+    BY1 -- Violation --> Block
+    BY1 -- Pass --> H1
     H1 -- Yes --> H2
     H2 -- Approved --> H3
-    H3 -- Stored Request --> BY1
-    BY1 -- Violation --> Block
-    BY1 -- Pass --> Exec
+    H3 -- Stored Request --> Exec
+    H1 -- No --> Exec
     
     %% After execution
     Exec --> PF1 --> PF2 --> Clients

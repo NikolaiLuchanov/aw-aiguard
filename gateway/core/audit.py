@@ -55,13 +55,13 @@ class AuditLogger:
 
     def __init__(
         self,
-        backend_url: str,
+        base_url: str,
         buffer_path: str,
         max_queue_size: int = 1000,
         batch_size: int = 50,
         flush_interval: float = 2.0,
     ):
-        self.backend_url = backend_url.rstrip("/")
+        self.backend_url = os.path.dirname(base_url).rstrip("/")
         self.buffer_path = os.path.expanduser(buffer_path)
         self.max_queue_size = max_queue_size
         self.batch_size = batch_size
@@ -82,7 +82,7 @@ class AuditLogger:
         except asyncio.QueueFull:
             logger.critical("Audit queue full (%d events) — dropping event.", self.max_queue_size)
 
-    async def log_inline(
+    async def log_event(
         self,
         api_key: str,
         event_type: str,
@@ -95,7 +95,7 @@ class AuditLogger:
         details: Optional[dict] = None,
         prompt_hash: Optional[str] = None,
     ):
-        """Convenience: create and queue an audit event in one call."""
+        """Convenience: create and queue an audit event in one call (non-blocking)."""
         event = AuditEvent(
             api_key=api_key,
             event_type=event_type,

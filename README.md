@@ -24,21 +24,33 @@ cp .env.example .env
 ```
 
 ### 3. Port Map & Communication Flow
-The system operates using two distinct ports to separate the lightweight proxy from the heavy backend.
 
 | Port | Role | Direction | Description |
 | :--- | :--- | :--- | :--- |
-| **`9020`** | **Gateway Proxy** | `Client` $\\rightarrow$ `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
-| **`8000`** | **Central Service** | `Gateway` $\\rightarrow$ `Backend` | The "Brain." Handles DB, Audit logs, HITL state, and **cloud Guardian scoring**. |
+| **`9020`** | **Gateway Proxy** | `Client` → `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
+| **`8000`** | **Central Service** | `Gateway` → `Backend` | Single service handling Guardian scoring (`/guardian`), DB, Audit logs, HITL state, and config sync. |
+
+The entire system is controlled by one env var: `GUARDIAN_URL`. The audit/backend base URL is derived automatically from it.
 
 ## ☁️ Dev vs. Production Transition
 
-The system is designed to be "Cloud-Ready." The transition from local development to production is controlled by the `GUARDIAN_URL` in your `.env` file.
+The system is designed to be "Cloud-Ready." The transition from local development to production is controlled by a single environment variable: `GUARDIAN_URL`.
 
 - **Development Mode:** `GUARDIAN_URL=http://localhost:8000/guardian`
-  - The Gateway communicates with a local mock Guardian instance for testing.
+  - Gateway sends Guardian scoring requests to `http://localhost:8000/guardian`.
+  - Audit/backend requests go to `http://localhost:8000` (derived as the base of `GUARDIAN_URL`).
 - **Production Mode:** `GUARDIAN_URL=https://api.aw-aiguard.cloud/guardian`
-  - The Gateway communicates with the cloud-deployed Guardian model server.
+  - Gateway sends Guardian scoring requests to the cloud.
+  - Audit/backend requests go to `https://api.aw-aiguard.cloud` (derived base).
+
+## 🛡️ Safety Pipeline
+
+Every request passing through the gateway is subject to a multi-layered defense:
+1. **PII & Secrets Scanning**: Local redaction and leakage prevention.
+2. **Guardian Pre-flight**: Real-time intent classification (Block/Pass).
+3. **HITL Middleware**: Mandatory human approval for irreversible actions.
+4. **BYOC Stop-Limits**: Hard boundaries defined by organizational policy.
+5. **Cloud Alerting**: Real-time notifications to operators via Telegram, Slack, and Email.
 
 ## 🏗️ Project Structure
 - `gateway/`: The lightweight interception proxy (Port 9020).
@@ -46,14 +58,15 @@ The system is designed to be "Cloud-Ready." The transition from local developmen
   - `core/guardrail.py` — Guardian pre-flight safety adapter (4 fail-safe strategies)
   - `core/scanner.py` — PII/Secrets regex + entropy scanner (Sequence A/B)
   - `core/hitl.py` — HITL pause middleware with full request resume flow
-  - `core/byoc.py` — BYOC stop-limits enforcement engine (hard_stop, hitl_gate, soft_block)
+  - `core/byoc.py` — BYOC stop-limits enforcement engine (hard_stop, soft_block)
   - `core/block.py` — Standardized 403 block response generator
 - `central-service/`: The resource-heavy management and audit backend (Port 8000).
   - `docker-compose.yml` — Local stack: PostgreSQL 16, MinIO, API server
   - `Dockerfile` — Python 3.9 slim, installs deps, runs uvicorn
   - `migrations/001_initial.sql` — Schema: 4 tables + 3 monthly partitions + 5 indexes
   - `audit_db.py` — asyncpg pool (min=2, max=10), Pydantic models, typed INSERT helpers
-  - `api_server.py` — FastAPI: `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health` + AlertEngine
+  - `alert_engine.py` — Multi-channel notification dispatcher (Telegram, Slack, Email)
+  - `api_server.py` — FastAPI: `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health`
 - `guardrail-config/`: YAML-based safety rules and system thresholds.
   - `byoc_rules.yaml` — Structured BYOC stop-limits (patterns, enforcement, severity)
   - `hitl_rules.yaml` — Irreversible action patterns with per-rule timeouts

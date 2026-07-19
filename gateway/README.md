@@ -19,7 +19,7 @@ GUARDIAN_MODEL=granite4.1-guardian
 GUARDIAN_FAIL_STRATEGY=block
 
 # PII & Secrets Scanner (Phase 1.4+)
-SCAN_SEQUENCE=A
+SCAN_SEQUENCE=B
 SCAN_REDACTION_MODE=token
 SCAN_ACTION_MODE=block
 
@@ -40,8 +40,8 @@ chmod +x run-gateway-dev.sh
 ### Request/Response Lifecycle
 The proxy implements a full round-trip flow to ensure security at both ends of the conversation:
 1. **Interception**: Captures the user prompt from the Agent.
-2. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
-3. **PII Scan**: (Phase 1.4) Scans for secrets/PII — blocks (403) if `SCAN_ACTION_MODE=block`, or warns and redacts if `SCAN_ACTION_MODE=warn`.
+2. **PII Scan**: (Phase 1.4) Scans for secrets/PII — blocks (403) if `SCAN_ACTION_MODE=block`, or warns and redacts if `SCAN_ACTION_MODE=warn`.
+3. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
 4. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
 5. **BYOC Stop-Limits**: (Phase 1.6+) Final enforcement layer — applies "never do this" rules after all other checks pass.
 6. **Forwarding**: Sends the request to the Cloud LLM provider.
@@ -115,15 +115,14 @@ The BYOC (Bring Your Own Criteria) engine codifies "never do this" rules as hard
 | Level | Behavior | Example Rule |
 |---|---|---|
 | `hard_stop` | Immediate 403 block, no override possible | `never_exfiltrate`, `never_override_system_prompt` |
-| `hitl_gate` | Passes with `WARNING` flag (still subject to HITL gate) | `never_delete`, `irreversible_requires_hitl` |
-| `soft_block` | Guardian alert + log warning, request continues | `max_tool_calls_per_minute` |
+| `soft_block` | Log warning + alert, request continues | `max_tool_calls_per_minute` |
 
 **Configuration:** `guardrail-config/byoc_rules.yaml` — structured rules with patterns, descriptions, enforcement levels, and severity.
 
 **Endpoints:**
 - `GET /byoc/rules`: List all active BYOC stop-limit rules with their enforcement levels.
 
-**How it integrates:** The BYOC engine is configured at startup from `byoc_rules.yaml`. Every request's prompt is checked against all BYOC patterns. A `hard_stop` violation returns a `403` with `blocked_by: "byoc_engine"`. A `hitl_gate` violation tags the request with a `WARNING` but allows it to proceed (since HITL already handles the pause). Rate-limit rules track per-API-key call counts within a sliding window.
+**How it integrates:** The BYOC engine is configured at startup from `byoc_rules.yaml`. Every request's prompt is checked against all BYOC patterns. A `hard_stop` violation returns a `403` with `blocked_by: "byoc_engine"`. A `soft_block` violation logs a warning and continues. Rate-limit rules track per-API-key call counts within a sliding window.
 
 ### Key Features
 - **Transparent Pass-Through**: Forwards all methods (`GET`, `POST`, `PUT`, `DELETE`) and returns the corresponding provider responses.

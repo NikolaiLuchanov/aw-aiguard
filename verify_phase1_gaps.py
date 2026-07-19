@@ -118,26 +118,8 @@ try:
     else:
         failed += 1
 
-    # Test 6: BYOC hitl_gate rules pass as WARNING (not hard block)
-    print("\n[Test 6] BYOC hitl_gate: never_delete passes with warning header")
-    # This prompt matches 'never_delete' BYOC rule but it's enforcement=hitl_gate, not hard_stop
-    # It should still be caught by HITL first (since hitl_rules.yaml also has delete patterns)
-    # But we test with a pattern that matches BYOC hitl_gate but NOT HITL rules
-    r = requests.post("http://localhost:9020/v1/chat/completions",
-                      json={"messages": [{"role": "user", "content": "Write a function to remove_file gracefully"}]})
-    # This should either pass through (HITL doesn't match 'remove_file') or be warned by BYOC
-    # Since Guardian mock returns 'yes' for safe prompts, it should pass (200 from mock LLM)
-    # but with X-Guard-Status: unverified if BYOC soft-flagged it
-    print(f"  Status: {r.status_code}")
-    print(f"  Headers: {dict(r.headers)}")
-    # It passes since Guardian says yes and BYOC hitl_gate is WARNING, not BLOCK
-    ok = r.status_code == 200  # Should reach the LLM
-    print(f"  {'PASS' if ok else 'FAIL'}")
-    if ok: passed += 1
-    else: failed += 1
-
-    # Test 7: Normal request still works (no regression)
-    print("\n[Test 7] Normal request — no regression")
+    # Test 6: Normal request still works (no regression)
+    print("\n[Test 6] Normal request — no regression")
     r = requests.post("http://localhost:9020/v1/chat/completions",
                       json={"messages": [{"role": "user", "content": "What is 2+2?"}]})
     ok = r.status_code == 200

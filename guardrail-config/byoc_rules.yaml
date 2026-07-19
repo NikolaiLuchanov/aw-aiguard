@@ -2,14 +2,13 @@
 # These are hard boundaries that no model decision can override.
 # Enforcement hierarchy: BYOC applies AFTER Guardian, PII, and HITL checks.
 # - hard_stop: immediate block, no override
-# - hitl_gate: pause for human approval (already handled by HITL rules, BYOC re-enforces)
 # - soft_block: Guardian alert + log warning
 
 rules:
   - name: "never_delete"
     description: "No command to delete data, files, or records — ever."
     pattern: "delete|rm -rf|rm -r |DROP TABLE|DROP DATABASE|TRUNCATE|unlink|remove_file"
-    enforcement: "hitl_gate"
+    enforcement: "hard_stop"
     severity: "critical"
 
   - name: "never_exfiltrate"
@@ -21,7 +20,7 @@ rules:
   - name: "irreversible_requires_hitl"
     description: "Any destructive write operation requires HITL approval."
     pattern: "git push|git force-push|git commit.*--amend|chmod 777|sudo.*rm"
-    enforcement: "hitl_gate"
+    enforcement: "hard_stop"
     severity: "high"
 
   - name: "never_override_system_prompt"
