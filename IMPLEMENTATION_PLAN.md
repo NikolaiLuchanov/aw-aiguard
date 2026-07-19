@@ -27,18 +27,21 @@
     - Build an Anthropic/OpenAI compatible reverse proxy that forwards requests to cloud APIs.
 - [ ] **1.3 Guardian Pre-flight Gate**
     - Implement `GuardianGuard` adapter to interface with the containerized model server.
-    - Logic: `User Input` $\rightarrow$ `Model Server` $\rightarrow$ `Score (yes/no)` $\rightarrow$ `Forward or Block`.
+    - Logic: `User Input` $\\rightarrow$ `Model Server` $\\rightarrow$ `Score (yes/no)` $\\rightarrow$ `Forward or Block`.
     - Implement 4 Fail-Safe strategies: `block` (Fail-Closed), `allow` (Fail-Open), `warn` (Audit Mode), and `fallback` (Emergency Filter).
-
-    - Implement the regex/entropy-based scanning layer.
+- [x] **1.4 PII & Secrets Scanner**
+    - Implement the regex/entropy-based scanning layer (`gateway/core/scanner.py`).
     - Logic: Redact sensitive patterns in-place before they leave the local machine.
+    - Action-based rules from `guardrail-config/scan_rules.yaml`: `redact`, `block`, `warn`, `ignore`.
+    - Sequence control via `SCAN_SEQUENCE` (A: Guardian→PII, B: PII→Guardian default, C: parallel opt-in).
+    - Action mode override via `SCAN_ACTION_MODE` (`block` or `warn` to down-grade).
 - [ ] **1.5 HITL "Pause" Middleware (P0 Requirement)**
     - Implement the interception logic for irreversible tool calls (e.g., delete, send email, commit code).
     - Logic: Match irreversible pattern $\\rightarrow$ Mark status as `pending_approval` $\\rightarrow$ Return `pending` response to agent.
 - [x] **1.6 Basic Block Responses**
     - Create standardized \"Safe Block\" responses for guardrail triggers and HITL denials.
     - **HITL Resume Flow** (gap fix): Store full HTTP request (method, URL, headers, body) on HITL pause. After approval, proxy re-forwards via `POST /hitl/resume/{request_id}` — no client re-submission needed.
-    - **BYOC Stop-Limits Engine** (gap fix): `gateway/core/byoc.py` enforces structured rules from `byoc_rules.yaml`. Three enforcement levels: `hard_stop` (403 block), `hitl_gate` (warning flag), `soft_block` (log + alert). Runs as final authority after Guardian → PII → HITL.
+    - **BYOC Stop-Limits Engine** (gap fix): `gateway/core/byoc.py` enforces structured rules from `byoc_rules.yaml`. Two enforcement levels: `hard_stop` (403 block), `soft_block` (log + alert). Runs as final authority after Guardian → PII → HITL.
 
 ### Phase 2: Infrastructure & Audit (The \"Cloud Brain\")
 *Goal: Deploy the management and safety layer to the cloud to offload local resources and establish a permanent audit trail.*
@@ -48,15 +51,20 @@
     - Stack: **PostgreSQL** (Hot Tier, partitioned monthly), **MinIO** (Cold Tier), **API Server** (FastAPI on port 8000).
     - **Schema (`001_initial.sql`):** `audit_logs` (partitioned by RANGE on `created_at`), `api_keys`, `settings_history`, `provenance` + 5 custom indexes.
     - **`audit_db.py`:** asyncpg pool (min=2, max=10), Pydantic models (`AuditEvent`, `ProvenanceEvent`, `SettingsChange`), typed INSERT helpers + batch insert.
-    - **`api_server.py`:** 5 endpoints — `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health`. Includes `AlertEngine` (Telegram/Slack/SMTP).
+    - **`api_server.py`:** 5 endpoints — `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health`.
+    - **`alert_engine.py`:** Multi-channel alert dispatch (Telegram, Slack, Email) with severity mapping.
     - **Verified:** Live Postgres container, schema migration, all 5 endpoints tested, data persisted.
-- [ ] **2.2 Remote Async Audit Pipeline**
-    - Update the Python gateway to push logs to the remote cloud endpoint using a secure API key.
-    - Logic: Proxy $\\rightarrow$ Cloud Audit API $\\rightarrow$ PostgreSQL.
-- [ ] **2.3 Cloud Alert Engine**
-    - *(AlertEngine scaffold implemented in `api_server.py` — Telegram/Slack/SMTP dispatch wired into `/audit/log` endpoint.)*
-    - Configure cloud-side webhooks for Telegram, Slack, and Email with real credentials.
-    - Logic: Cloud Model Server `no` score $\\rightarrow$ Cloud Alert Engine $\\rightarrow$ User.
+- [x] **2.2 Remote Async Audit Pipeline**
+    - Wire `AuditLogger` into gateway proxy (`gateway/core/audit.py`).
+    - Logic: Proxy $\rightarrow$ Cloud Audit API $\rightarrow$ PostgreSQL. Falls back to local JSONL buffer when backend unreachable.
+    - Verified: Async queue + buffer replay working.
+- [x] **2.3 Cloud Alert Engine**
+    - `AlertEngine` dispatch center in `central-service/alert_engine.py` (separate module).
+    - Multi-channel: Telegram (Bot API), Slack (Incoming Webhook), Email (SMTP via stdlib `smtplib` + executor).
+    - Severity mapping: `CRITICAL` (guardian/BYOC block), `HIGH` (PII block), `WARNING` (warn events), `NOTICE` (pause), `ESCALATE` (repeated failures).
+    - Channel config read from `guardrail-config/settings.yaml` (`alert_channels` key). Per-channel credentials from `.env`.
+    - Integrated into `api_server.py`: both `POST /audit/log` and `POST /audit/batch` trigger alerts.
+    - **Verified:** 19/19 tests passed in `verify_phase_2_3.py` (15 unit + 4 E2E).
 - [ ] **2.4 Cloud DB Schema**
     - *(Schema implemented and verified in Phase 2.1.)*
     - Add partition lifecycle management (archive partitions >30 days to MinIO, drop from Postgres).
@@ -73,7 +81,7 @@
     - Build a lightweight web interface integrated with the central service.
     - **Approval Queue:** View pending HITL requests with provenance $\\rightarrow$ Click \"Approve\" or \"Deny\".
 - [ ] **3.2 BYOC Stop-Limits Engine**
-    - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop`, `hitl_gate`, `soft_block` levels is active.)*
+    - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop` and `soft_block` levels is active.)*
     - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.
     - Codify additional "Never Do This" rules in `byoc_rules.yaml` (e.g., `never_delete`, `never_exfiltrate`).
     - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated, except HITL-protected rules (e.g. `never_delete`) which pause for human approval.
