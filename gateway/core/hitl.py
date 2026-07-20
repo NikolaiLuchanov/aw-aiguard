@@ -21,6 +21,13 @@ class HitlDecision(str):
     PROCEED = "proceed"
     PAUSE = "pause"
 
+
+class HitlNotificationMode(str):
+    SILENT = "silent"
+    DETAILED = "detailed"
+    SUMMARY = "summary"
+
+
 @dataclass
 class RequestContext:
     """Stores the full HTTP request so the proxy can replay it on approval."""
@@ -44,12 +51,21 @@ class HITLGate:
     Human-in-the-Loop middleware for irreversible actions.
     Buffers high-risk requests and requires explicit approval.
     """
-    def __init__(self, rules_path: str, default_timeout: int = 300):
+    def __init__(self, rules_path: str, default_timeout: int = 300, notification_mode: str = "silent"):
         self.default_timeout = default_timeout
+        self.notification_mode = self._validate_notification_mode(notification_mode)
         self.rules = self._load_rules(rules_path)
         self.pending_requests: Dict[str, PendingRequest] = {}
         self._background_task: Optional[asyncio.Task] = None
-        logger.info(f"HITLGate initialized with {len(self.rules)} rules.")
+        logger.info(f"HITLGate initialized with {len(self.rules)} rules. notification_mode={self.notification_mode}")
+
+    def _validate_notification_mode(self, mode: str) -> str:
+        """Validate and normalize the notification mode. Falls back to silent if invalid."""
+        mode = mode.lower().strip()
+        if mode in (HitlNotificationMode.SILENT, HitlNotificationMode.DETAILED, HitlNotificationMode.SUMMARY):
+            return mode
+        logger.warning(f"Invalid HITL_NOTIFICATION_MODE={mode}, falling back to 'silent'")
+        return HitlNotificationMode.SILENT
 
     def _load_rules(self, path: str) -> list:
         try:
@@ -80,6 +96,32 @@ class HITLGate:
                 logger.warning(f"HITL PAUSE: {rule['name']} triggered for request {request_id}")
                 return HitlDecision.PAUSE, request_id
         return HitlDecision.PROCEED, None
+
+    def get_pause_response(self, request_id: str, prompt: str) -> Dict[str, Any]:
+        """
+        Build the HITL pause response payload based on notification_mode.
+        - silent: request_id, status, generic message
+        - detailed: + matched rule name, prompt snippet, timeout
+        - summary: same as silent (external alerting is a Phase 3+ roadmap item)
+        """
+        base = {
+            "request_id": request_id,
+            "status": "pending_approval",
+            "message": "Request paused for human approval.",
+        }
+        if self.notification_mode == HitlNotificationMode.DETAILED:
+            req = self.pending_requests.get(request_id)
+            if req:
+                snippet = prompt[:200]
+                if len(prompt) > 200:
+                    snippet += "..."
+                base.update({
+                    "triggered_rule": req.rule_name,
+                    "prompt_snippet": snippet,
+                    "timeout_seconds": req.timeout_seconds,
+                    "expires_at": req.created_at + req.timeout_seconds,
+                })
+        return base
 
     def approve(self, request_id: str) -> bool:
         if request_id in self.pending_requests:

@@ -151,7 +151,7 @@ A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no mod
 
 **Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
@@ -241,7 +241,7 @@ A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-fli
 
 **Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately, with the exception of HITL-protected rules (e.g. `never_delete`) which require explicit human approval rather than an absolute hard stop.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
@@ -313,7 +313,7 @@ This layer runs *in the proxy pipeline* alongside the Guardian safety gate. It u
   3. If a match exceeds a confidence threshold, apply the configured action: **block** (403 if `SCAN_ACTION_MODE=block`), **warn** (log + `WARNING` flag if `SCAN_ACTION_MODE=warn`), or **redact** (in-place masking with `***REDACTED_API_KEY***`). All actions push an async audit log entry.
   4. If match fails or is ambiguous, pass through to Guardian's scoring (Layer 2) for an LLM-based secondary check on sensitive content.
 - **Alerts & Audits:** Any `WARN` flags from PII/Secrets scanning are tagged in the audit table (`audit_tags = pii_detected`, `audit_tags = secret_exposure`). If your alerting channels (Slack, Telegram) support severity levels, these fire as "Warning" alerts rather than hard "Block" alerts — allowing developers to review what was auto-redacted without blocking their work.
-- **Configurability:** You provide an allowlist of safe patterns (e.g., `"example.com"`, `"test-key-*"`) and the proxy skips redaction for those. All other traffic is scanned with aggressive defaults. This is controlled locally by `~/.config/aw-aiguard/scan_rules.yaml` — see Section 10 for synchronization details.
+- **Configurability:** You provide an allowlist of safe patterns (e.g., `"example.com"`, `"test-key-*"`) and the proxy skips redaction for those. All other traffic is scanned with aggressive defaults. This is controlled locally by `guardrail-config/scan_rules.yaml` — see Section 10 for synchronization details.
 
 #### How It Interacts With The LLM Tools
 | Tool | Secret/PII Scanning Target | Action If Flagged |
@@ -366,7 +366,7 @@ To move from architecture to implementation:
 1. **Cowork Bridge:** We intercept Cowork by configuring Claude Desktop's `claude_desktop_config.json` (or similar environment variable) to route its internal model calls straight through `localhost:9020`. This acts as a pure file-based HTTP proxy without needing to write reverse-engineering glue code to watch directory JSON dumps.
 2. **Guardrail Confidence Thresholds:** Fully settings-driven per the table in Section 9 (e.g., changing `llm_safety_mode` from `hard_block` to `warn_only`). 
 3. **Runtime Architecture (Local Proxy vs Central Backend):** 
-### 10.C. Runtime Architecture (Native Proxy ↔ Cloud Backend)
+### 10.c. Runtime Architecture (Native Proxy ↔ Cloud Backend)
 - **Local Gateway (The Performance Edge):**
     - **What it does:** Real-time JSON interception, remote Granite 4.1 Guardian scoring, and immediate blocking/pass-through.
     - **Best Runtime:** **Native Process (Python/FastAPI).** This avoids Docker virtualization overhead on macOS, ensuring the lowest possible latency for the interception point.

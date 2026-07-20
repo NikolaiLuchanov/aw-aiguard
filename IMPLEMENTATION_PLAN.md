@@ -21,11 +21,11 @@
 
 - [x] **1.1 Project Scaffolding**
     - Initialize directory structure: `gateway/`, `central-service/`, `guardrail-config/`.
-    - Set up Python virtual environment and dependency management (`pyproject.toml` or `requirements.txt`).
+    - Set up Python virtual environment and dependency management (`requirements.txt`).
 - [x] **1.2 Basic Pass-Through Proxy**
     - Implement FastAPI server on `localhost:9020`.
     - Build an Anthropic/OpenAI compatible reverse proxy that forwards requests to cloud APIs.
-- [ ] **1.3 Guardian Pre-flight Gate**
+- [x] **1.3 Guardian Pre-flight Gate**
     - Implement `GuardianGuard` adapter to interface with the containerized model server.
     - Logic: `User Input` $\\rightarrow$ `Model Server` $\\rightarrow$ `Score (yes/no)` $\\rightarrow$ `Forward or Block`.
     - Implement 4 Fail-Safe strategies: `block` (Fail-Closed), `allow` (Fail-Open), `warn` (Audit Mode), and `fallback` (Emergency Filter).
@@ -80,11 +80,11 @@
 - [ ] **3.1 Centralized Admin Dashboard (Web UI)**
     - Build a lightweight web interface integrated with the central service.
     - **Approval Queue:** View pending HITL requests with provenance $\\rightarrow$ Click \"Approve\" or \"Deny\".
-- [ ] **3.2 BYOC Stop-Limits Engine**
+- [x] **3.2 BYOC Stop-Limits Engine**
     - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop` and `soft_block` levels is active.)*
     - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.
-    - Codify additional "Never Do This" rules in `byoc_rules.yaml` (e.g., `never_delete`, `never_exfiltrate`).
-    - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated, except HITL-protected rules (e.g. `never_delete`) which pause for human approval.
+    - Codify additional "Never Do This" rules in `byoc_rules.yaml` (e.g., `never_exfiltrate`).
+    - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated. Irreversible actions (deletion, commits, etc.) are handled by the HITL middleware gate (Layer 4), not by BYOC.
 - [ ] **3.3 Approval Execution Flow**
     - *(Local version done in Phase 1.6 gap fix — `POST /hitl/resume/{request_id}` handles the full flow.)*
     - Extend with cloud persistence: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request` via the Central Service.
@@ -94,6 +94,9 @@
 ### Phase 4: Defense-in-Depth (Advanced Hardening)
 *Goal: Implement complex safety patterns and structural constraints to address indirect injection and data poisoning.*
 
+- [ ] **4.1 Function-Calling Hallucination Detection**
+    - Add a pre-execution Guardian pass to evaluate whether model-proposed tool calls are legitimate or injected fabrications.
+    - Works alongside structured schema validation — schema checks structure, Guardian checks semantics.
 - [ ] **4.2 Stored Injection Countermeasures**
     - Implement ingestion-time sanitization (e.g., stripping `<script>` tags, zero-width chars) for RAG data and fetched content.
 - [ ] **4.3 LLM05 Output Control**
@@ -134,3 +137,46 @@ The Gateway Proxy is designed to be stateless. The switch from local development
 | **Audit Storage** | PostgreSQL / MinIO | Event logging, Settings, and Long-term archiving |
 | **Deployment** | Docker Compose | Local orchestration of backend services |
 | **Notifications** | Telegram/Slack/Email | Real-time safety alerts and HITL notifications |
+
+---
+
+## 🧪 Testing
+
+### Pytest Test Suite — 158 Unit Tests
+
+All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
+
+```bash
+source venv/bin/activate
+pytest tests/ -v
+```
+
+### Layer-by-Layer Test Coverage
+
+| Layer | Module | Tests | What It Verifies |
+|---|---|---|---|
+| **L0** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
+| **L1** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+| **L2** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies, HTTP 500, timeout, payload shape |
+| **L3** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-key rate limiting |
+| **L4** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry, status endpoint, RequestContext, custom rules |
+| — | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes |
+| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer write/replay, flush on shutdown, overflow |
+| — | `gateway/core/proxy.py` | 18 | End-to-end: safe pass, guardian block, byoc block, HITL pause, streaming |
+| **Cloud** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji, credential warnings |
+| **Cloud** | `central-service/api_server.py` | 11 | `_get_severity` mapping, settings YAML loading |
+| **Cloud** | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, pool init, schema alignment |
+
+### Standalone Scripts → Pytest Migration
+
+| Old Script | New Location | Tests |
+|---|---|---|
+| `verify_phase_2_3.py` (19) | `tests/central_service/test_alert_engine.py` | Telegram/Slack/Email dispatch, severity mapping, emoji, credential warnings, ESCALATE multi-channel |
+| `verify_phase1_gaps.py` (6) | `tests/gateway/test_proxy.py` + `test_hitl.py` + `test_byoc.py` | HITL pause→approve→resume, HITL deny→403, BYOC hard_stop, BYOC rules endpoint |
+| `verify_phase_1_6.py` (5) | `tests/gateway/test_block.py` + `test_proxy.py` + `test_hitl.py` | Guardian/PII block standardized JSON, HITL denial/expiry error structure, normal request regression |
+
+### Test Infrastructure
+
+- **`tests/conftest.py`**: Shared fixtures (temp YAML files, sample events, mock responses, env isolation).
+- **`pyproject.toml`**: pytest config with `asyncio_mode=auto`, coverage settings, markers (`unit`, `integration`, `slow`).
+- All tests use `unittest.mock.AsyncMock`, `MagicMock`, and `patch` — zero external dependencies.

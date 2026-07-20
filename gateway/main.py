@@ -35,12 +35,13 @@ SCAN_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-confi
 # HITL Configuration
 HITL_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "hitl_rules.yaml")
 HITL_DEFAULT_TIMEOUT = int(os.getenv("HITL_DEFAULT_TIMEOUT", "300"))
+HITL_NOTIFICATION_MODE = os.getenv("HITL_NOTIFICATION_MODE", "silent")
 
 # BYOC Configuration
 BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
 
 # Audit Logger Configuration — same Central Service as Guardian
-AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", os.path.expanduser("~/.config/aw-aiguard/audit_buffer.jsonl"))
+AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", "~/.config/aw-aiguard/audit_buffer.jsonl")
 
 if not TARGET_URL or not API_KEY:
     print("Error: TARGET_API_BASE_URL and TARGET_API_KEY must be set in gateway/.env")
@@ -63,7 +64,8 @@ scanner = PIIScanner(
 # Initialize the HITL Gate
 hitl = HITLGate(
     rules_path=HITL_RULES_PATH,
-    default_timeout=HITL_DEFAULT_TIMEOUT
+    default_timeout=HITL_DEFAULT_TIMEOUT,
+    notification_mode=HITL_NOTIFICATION_MODE
 )
 
 # Initialize the BYOC Engine

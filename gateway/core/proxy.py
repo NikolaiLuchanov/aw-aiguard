@@ -297,11 +297,7 @@ class LLMProxy:
                     prompt_hash=prompt_hash,
                 ) if self.audit_logger else None
                 return Response(
-                    content=json.dumps({
-                        "request_id": hitl_request_id,
-                        "status": "pending_approval",
-                        "message": "Request paused for human approval."
-                    }),
+                    content=json.dumps(self.hitl.get_pause_response(hitl_request_id, prompt)),
                     status_code=202,
                     media_type="application/json"
                 )

@@ -84,7 +84,14 @@ The HITL middleware intercepts requests identified as "irreversible" or "high-ri
 - `GET /hitl/pending`: List all pending requests.
 - `POST /hitl/resume/{request_id}`: **(New)** After approval, retrieves the LLM response by forwarding the stored request.
 
-**Complete HITL workflow:**
+**HITL Notification Modes (`HITL_NOTIFICATION_MODE`):**
+Controls the detail level of the HITL pause response:
+
+| Mode | Behavior |
+|---|---|
+| `silent` (default) | Returns only `request_id`, `status`, and generic message |
+| `detailed` | Includes `triggered_rule`, `prompt_snippet` (200 chars), `timeout_seconds`, and `expires_at` |
+| `summary` | Same as `silent`; external alerting is a Phase 3+ roadmap item |
 ```
 Agent → POST /v1/chat/completions (contains "delete_file")
    ↓

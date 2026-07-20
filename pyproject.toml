@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "aw-aiguard"
+version = "0.2.0"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests that mock all external dependencies",
+    "integration: Tests that require external services (Postgres, mock servers)",
+    "slow: Tests that take longer than 1 second",
+]
+
+[tool.coverage.run]
+source = ["gateway", "central_service", "shared"]
+omit = ["*/main.py", "*/migrations/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+    "FUTURE:",
+]

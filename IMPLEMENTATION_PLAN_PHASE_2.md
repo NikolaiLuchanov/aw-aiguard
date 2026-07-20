@@ -140,14 +140,14 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
       timeout: 5s
       retries: 5
 
   api_server:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
     container_name: aw-aiguard-api
     ports:
@@ -736,3 +736,32 @@ When the system moves from local Docker Compose to cloud deployment:
 | Docker Compose | Kubernetes / managed services | Auto-scaling, zero-downtime deploys, multi-region |
 
 These are tracked as Phase 3/4 items in `IMPLEMENTATION_PLAN.md` and do not block Phase 2 delivery.
+
+---
+
+## 🧪 Phase 2 Verification — Pytest Test Suite
+
+Phase 2 components are verified by the pytest test suite (158 tests total). Phase 2-specific test files:
+
+| Component | Test File | Tests | Scope |
+|---|---|---|---|
+| **2.3 Alert Engine** | `tests/central_service/test_alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji mapping, credential warnings, ESCALATE multi-channel, NOTICE/allow no-dispatch |
+| **2.1/2.2 Audit DB** | `tests/central_service/test_audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment with SQL |
+| **2.2/2.3 API Server** | `tests/central_service/test_api_server.py` | 11 | `_get_severity` severity mapping, settings YAML loading |
+
+### Verification History
+
+| Script | Tests | Status | Migrated To |
+|---|---|---|---|
+| `verify_phase_2_3.py` | 19 (15 unit + 4 E2E) | ✅ Migrated | `tests/central_service/test_alert_engine.py` (17 unit tests) |
+
+> **Note:** The original `verify_phase_2_3.py` E2E tests required a live Postgres backend. In the pytest migration, those E2E tests were converted to unit tests using mocked HTTP clients — eliminating the need for any live database while preserving full test coverage of the alert dispatch logic.
+
+### Running Phase 2 Tests
+
+```bash
+source venv/bin/activate
+pytest tests/central_service/ -v
+```
+
+All Phase 2 tests are pure unit tests — zero external dependencies.

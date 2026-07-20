@@ -73,3 +73,53 @@ Every request passing through the gateway is subject to a multi-layered defense:
   - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
+- `tests/`: 158 pytest tests covering all safety layers.
+  - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
+  - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
+  - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
+  - `gateway/test_hitl.py` — HITLGate: pause/approve/deny/expiry, status, RequestContext, custom rules
+  - `gateway/test_byoc.py` — BYOCEngine: pattern rules, rate limits, hard_stop/soft_block enforcement
+  - `gateway/test_block.py` — BlockReason codes, generate_block_response (403 JSON body)
+  - `gateway/test_audit.py` — AuditLogger: queue, buffer write, replay, flush, lifecycle
+  - `gateway/test_proxy.py` — LLMProxy: safe pass-through, guardian block, byoc block, hitl pause, streaming
+  - `central_service/test_alert_engine.py` — Telegram/Slack/Email dispatch, severity mapping, emoji, credential warnings
+  - `central_service/test_api_server.py` — `_get_severity` mapping, settings YAML loading
+  - `central_service/test_audit_db.py` — AuditDB init, DEFAULT_SETTINGS, schema field alignment
+- `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
+
+## 🧪 Testing
+
+Run the full suite:
+```bash
+source venv/bin/activate
+pytest tests/ -v
+```
+
+All 158 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+
+Test coverage maps directly to the safety pipeline layers:
+
+| Layer | Module | Tests | What It Verifies |
+|---|---|---|---|
+| L0 | `shared/schemas.py` | 10 | Pydantic model validation (AuditEvent, ProvenanceEvent, SettingsChange) |
+| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
+| L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
+| L3 | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key |
+| L4 | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, full request replay |
+| — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
+| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
+| — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
+| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
+| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
+| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+
+### Migration from standalone scripts
+
+The original `verify_phase_2_3.py`, `verify_phase1_gaps.py`, and `verify_phase_1_6.py` scripts (48 total tests) have been fully migrated into the pytest structure using proper fixtures, parametrization, and isolation. See `tests/conftest.py` for shared fixtures (temp YAML files, mock responses, environment isolation).
+
+### Adding new tests
+
+- Place tests under `tests/` mirroring the production module structure.
+- Use the `@pytest.mark.unit` marker for all tests (marks added for future integration/slow categorization).
+- Use fixtures from `conftest.py` — e.g., `scan_rules_path`, `hitl_rules_path`, `byoc_rules_path`, `temp_scan_rules`, `temp_hitl_rules`, `temp_byoc_rules`, `sample_audit_event`.
+- Mark async tests with `@pytest.mark.asyncio` (pytest-asyncio handles the event loop).

@@ -79,8 +79,8 @@ flowchart TD
         subgraph PreFlight ["Layer 1: PII & Secrets Scanning (Default: PII → Guardian)"]
             P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
             P1["PII & Secrets Scanning<br/>(SCAN_ACTION_MODE=block)"]
-            P3{"Function-Call<br/>Hallucination Check"}
-            P4["JSON Schema Validation<br/>CaMeL Separation"]
+            P3{"Function-Call<br/>Hallucination Check<br/>[ROADMAP]"}
+            P4["JSON Schema Validation<br/>CaMeL Separation<br/>[ROADMAP]"}
         end
 
         %% Decision Logic
@@ -126,9 +126,9 @@ flowchart TD
     
     %% Pre-flight sequence
     P1 --> P2
-    P2 --> P3
-    P3 --> P4
-    P4 --> Decision
+    P2 -.-> P3
+    P3 -.-> P4
+    P4 -.-> Decision
     
     %% Model Call Path
     P2 -.-> Model
@@ -166,6 +166,8 @@ flowchart TD
     style Backend fill:#f1f5f9,stroke:#47569,stroke-width:2px
     style PostFlight fill:#f8fafc,stroke:#64748b,stroke-width:2px
     style BYOC fill:#fff8e1,stroke:#f57c00,stroke-width:2px
+    style P3 fill:#f5f5f5,stroke:#adb5bd,stroke-width:2px,stroke-dasharray: 5 5
+    style P4 fill:#f5f5f5,stroke:#adb5bd,stroke-width:2px,stroke-dasharray: 5 5
         </div>
     </div>
 </body>

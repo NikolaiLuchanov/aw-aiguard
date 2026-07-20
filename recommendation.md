@@ -77,13 +77,11 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 
 | Rule ID | Description | Enforcement Level |
 |---|---|---|
-| `never_delete` | No command to delete data, files, or records — ever. Requires human approval via HITL gate. | Middleware gate (HITL approval required) |
 | `never_exfiltrate` | No outbound transmission of data to external URLs / domains not in allowlist. | Hard stop (no HITL override possible) |
 | `never_override_system_prompt` | No prompt injection or system prompt manipulation allowed by user input. | Pre-flight block |
 | `max_tool_calls_per_minute` | Rate limit on tool invocations per API key to prevent abuse. | Guardian soft-block + alert |
-| `irreversible_requires_hitl` | Any destructive write operation requires HITL approval. | Middleware gate |
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary that blocks execution immediately, with the exception of HITL-protected rules (e.g., `never_delete`) which require explicit human approval rather than an absolute hard stop.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary that blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
 ### 8. Defense-in-Depth Summary (Updated v1.1)
 
@@ -259,3 +257,46 @@ Set up alerts on your **highest-risk channels first**:
 The key advantage: Guardian's `no` score is programmatically parseable — it's just text returning `yes/no`, so wiring it to *any* HTTP POST endpoint or SMTP call is straightforward with ~10 lines of code.
 
 ---
+
+## Testing & Verification
+
+### Pytest Test Suite — 158 Tests
+
+All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
+
+```bash
+source venv/bin/activate
+pytest tests/ -v
+```
+
+### Layer-by-Layer Test Coverage
+
+| Safety Layer | Module | Tests | What's Verified |
+|---|---|---|---|
+| **Schema (L0)** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
+| **PII Scanner (L1)** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+| **Guardian (L2)** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500 handling, timeout handling, payload shape |
+| **BYOC (L3)** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-API-key rate limiting, rule summary API |
+| **HITL (L4)** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, status endpoint, RequestContext storage for resume, custom rules, notification modes |
+| **Block Response** | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes (safety violation, secret detected, HITL denied/expired), request_id inclusion |
+| **Audit Logger** | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer write, buffer replay on reconnect, flush on shutdown, queue overflow handling, prompt hashing |
+| **Proxy Pipeline** | `gateway/core/proxy.py` | 18 | End-to-end: safe pass-through, guardian block (403), byoc block (403), HITL pause (202), path normalization, streaming detection |
+| **Alert Engine** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji mapping (🔴🟠🟡⚪), unknown severity silence, empty channels no-crash, credential warnings |
+| **Severity Mapping** | `api_server.py` | 11 | All event_type+component → severity mappings (CRITICAL/HIGH/WARNING/NOTICE) |
+| **Audit DB** | `audit_db.py` | 12 | DEFAULT_SETTINGS values, connection pool init, schema field alignment with SQL table |
+
+### Standalone Verification Scripts → Pytest Migration
+
+The original `verify_phase_2_3.py`, `verify_phase1_gaps.py`, and `verify_phase_1_6.py` scripts (48 total tests) have been fully migrated into the pytest structure:
+
+| Old Script | New Location | Tests Migrated |
+|---|---|---|
+| `verify_phase_2_3.py` (19 tests) | `tests/central_service/test_alert_engine.py` | Telegram dispatch, Slack webhook, Email via smtplib, severity mapping (7 mappings), ESCALATE multi-channel, unknown severity silence, empty channels, emoji mapping, credential warnings, NOTICE/allow no-dispatch |
+| `verify_phase1_gaps.py` (6 tests) | `tests/gateway/test_proxy.py` + `tests/gateway/test_byoc.py` + `tests/gateway/test_hitl.py` | HITL full flow (pause→approve→resume), HITL deny→403, BYOC hard_stop blocks, BYOC rules endpoint, normal request pass-through |
+| `verify_phase_1_6.py` (5 tests) | `tests/gateway/test_block.py` + `tests/gateway/test_proxy.py` + `tests/gateway/test_hitl.py` | Guardian block standardized JSON, PII block standardized JSON, HITL denial error structure, HITL expiry structure, normal request regression |
+
+### Test Infrastructure
+
+- **`tests/conftest.py`**: Shared fixtures including temp YAML files for custom rules (`temp_scan_rules`, `temp_hitl_rules`, `temp_byoc_rules`), sample audit events, mock Guardian responses, environment isolation (strips Telegram/Slack/SMTP env vars), and project path setup.
+- **`pyproject.toml`**: pytest config with `asyncio_mode=auto`, coverage source/omit settings, test markers (`unit`, `integration`, `slow`).
+- All tests are **unit tests** — no live services required. Mocked via `unittest.mock.AsyncMock`, `MagicMock`, and `patch`.

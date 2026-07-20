@@ -8,11 +8,9 @@ manages settings sync, and dispatches alerts to configured channels.
 import os
 import sys
 import logging
-import smtplib
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
-from email.message import EmailMessage
 from typing import Dict, List, Optional
 
 import httpx
