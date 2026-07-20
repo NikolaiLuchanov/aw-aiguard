@@ -484,21 +484,54 @@ SMTP_TO=admin@example.com
 
 ---
 
-## 2.4 Cloud DB Schema (Detailed)
+## 2.4 Cloud DB Schema Lifecycle Management
 
-### Task 2.4.1: Run migration on container startup
+> **Full detailed spec:** See [`IMPLEMENTATION_PLAN_PHASE_2_4.md`](../../IMPLEMENTATION_PLAN_PHASE_2_4.md)
 
-The `docker-compose.yml` mounts `./migrations` to `/docker-entrypoint-initdb.d`. PostgreSQL automatically runs all `.sql` files in this directory on first startup.
+### What This Phase Covers
 
-**`migrations/001_initial.sql`** contains the full CREATE TABLE + INDEX statements from Task 2.1.1.
+Automated **partition lifecycle management** for the `audit_logs` table. The schema was built in Phase 2.1. This phase adds operational plumbing to keep the hot tier at 30 days while preserving data indefinitely on the cold tier (MinIO).
 
-For future migrations (schema changes), add numbered files:
-```text
-migrations/
-├── 001_initial.sql
-├── 002_add_retention_policy.sql
-└── ...
-```
+### Summary of Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| **2.4.1** | Create migration `002_partition_lifecycle.sql` with retention policy functions | P0 |
+| **2.4.2** | Implement `partition_manager.py` — archive → drop → create | P0 |
+| **2.4.3** | Wire partition manager into `api_server.py` as background task + `/admin/partition-manage` endpoint | P0 |
+| **2.4.4** | Add MinIO S3 integration (JSONL.gz upload, manifest metadata) | P0 |
+| **2.4.5** | Auto-create future partitions (N+1, N+2, N+3), idempotent | P1 |
+| **2.4.6** | Test suite: `tests/central_service/test_partition_manager.py` (10 tests, fully mocked) | P1 |
+| **2.4.7** | Docker Compose integration (no changes needed; runs inside api_server container) | P1 |
+
+### Key Design Decisions
+
+- **Schedule:** 6-hour cron via `asyncio.create_task` in `api_server.py` + manual `POST /admin/partition-manage`
+- **Archive format:** JSONL.gz (human-readable, compressible, streaming-friendly)
+- **S3 key pattern:** `audit-archive/YYYY/MM/YYYY-MM.jsonl.gz`
+- **Metadata:** `audit-archive/YYYY/YYYY-MM.manifest.json` (row count, sizes, archive timestamp)
+- **Safety:** Idempotent partition creation (skips if exists), age-based filtering (only archives if `max(created_at)` > 30 days old)
+- **Dependencies:** `minio==7.2.0`, `boto3==1.34.0`
+
+### Acceptance Criteria
+
+- [ ] `002_partition_lifecycle.sql` creates 3 functions in Postgres
+- [ ] `PartitionManager.run_full_cycle()` archives, drops, and creates partitions correctly
+- [ ] Year/month rollover works (Dec → Jan)
+- [ ] Idempotent — safe to run repeatedly with no changes
+- [ ] 10 unit tests pass with mocked dependencies
+- [ ] No data loss — archived data fully recoverable from MinIO
+
+### Relationship to Other Phases
+
+| Phase | Relationship |
+|-------|-------------|
+| **2.1** | Operates on the schema built in 2.1; extends `001_initial.sql` with `002_partition_lifecycle.sql` |
+| **2.2** | Manages downstream storage of data fed by the async audit pipeline |
+| **2.3** | Can extend AlertEngine to fire `WARNING` on archive failures |
+| **3.1** | Admin dashboard can surface partition stats |
+| **3.4** | Config sync can update `retention_days` dynamically |
+| **5.2** | Smaller hot partitions → faster query performance |
 
 > **Future migration (Phase 3+):** Replace raw SQL init scripts with `alembic` for versioned, reversible migrations. Run `alembic init migrations` once, then `alembic revision --autogenerate -m "message"` for each change. This tracks applied migrations in an `alembic_version` table.
 

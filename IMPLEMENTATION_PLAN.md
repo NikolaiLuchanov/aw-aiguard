@@ -65,10 +65,14 @@
     - Channel config read from `guardrail-config/settings.yaml` (`alert_channels` key). Per-channel credentials from `.env`.
     - Integrated into `api_server.py`: both `POST /audit/log` and `POST /audit/batch` trigger alerts.
     - **Verified:** 19/19 tests passed in `verify_phase_2_3.py` (15 unit + 4 E2E).
-- [ ] **2.4 Cloud DB Schema**
-    - *(Schema implemented and verified in Phase 2.1.)*
-    - Add partition lifecycle management (archive partitions >30 days to MinIO, drop from Postgres).
-    - Add automated partition creation for future months.
+|- [ ] **2.4 Cloud DB Schema Lifecycle Management**
+    - *See IMPLEMENTATION_PLAN_PHASE_2_4.md for full spec.*
+    - Implement `PartitionManager`: archive old partitions (30-day TTL) to MinIO (JSONL.gz), drop from Postgres.
+    - Auto-create future monthly partitions (N+1 through N+3), idempotent.
+    - Wire into `api_server.py` as a 6-hour scheduled task + manual `POST /admin/partition-manage` endpoint.
+    - New SQL migration: `002_partition_lifecycle.sql` (3 functions: `drop_archived_partition`, `create_monthly_partition`, `list_archivable_partitions`).
+    - New Python package: `minio==7.2.0` for S3-compatible storage.
+    - New test file: `tests/central_service/test_partition_manager.py` (10 tests, fully mocked).
 - [ ] **2.5 Provenance Tagging Pipeline (Layer 0)**
     - Implement the `provenance` object (source_id, trust_level, etc.) and ensure it carries through the request lifecycle.
     - Logic: Tag data at ingestion time → Attach provenance to audit logs → Store in cloud PostgreSQL.
