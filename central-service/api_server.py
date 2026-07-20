@@ -20,7 +20,9 @@ from fastapi.responses import JSONResponse
 
 # Ensure central-service is importable (works both in Docker and local dev)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from audit_db import AuditDB, AuditEvent, SettingsChange
+from partition_manager import PartitionManager
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +33,7 @@ logging.basicConfig(level=logging.INFO)
 
 audit_db = AuditDB()
 alert_engine: Optional["AlertEngine"] = None
+partition_manager: Optional[PartitionManager] = None
 
 
 def _load_settings_yaml() -> Dict:
@@ -76,13 +79,53 @@ def _get_severity(event: AuditEvent) -> str:
 # FastAPI App
 # ------------------------------------------------------------------ #
 
+async def _partition_cycle_loop(pm: PartitionManager) -> None:
+    """Run partition lifecycle every 6 hours."""
+    while True:
+        try:
+            await asyncio.sleep(21600)  # 6 hours
+            logger.info("Running scheduled partition lifecycle...")
+            stats = await pm.run_full_cycle()
+            if stats["errors"]:
+                logger.warning("Partition cycle had errors: %s", stats["errors"])
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Partition cycle failed")
+            await asyncio.sleep(300)  # Retry after 5 min on failure
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await audit_db.connect()
-    global alert_engine
+    global alert_engine, partition_manager
     alert_engine = AlertEngine()
-    logger.info("Central Service started (Postgres + AlertEngine ready).")
+
+    # Partition Manager — manages hot→cold data lifecycle
+    partition_manager = PartitionManager(
+        database_url=os.getenv("DATABASE_URL"),
+        minio_endpoint=os.getenv("MINIO_ENDPOINT", "minio:9000"),
+        minio_access_key=os.getenv("MINIO_ACCESS_KEY", "aiguard"),
+        minio_secret_key=os.getenv("MINIO_SECRET_KEY", "aiguard_local_dev"),
+        retention_days=int(os.getenv("AUDIT_TTL_DAYS", "30")),
+        minio_secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
+    )
+    await partition_manager.connect()
+    logger.info("PartitionManager started.")
+
+    # Schedule periodic lifecycle run (every 6 hours)
+    app.state.partition_cycle_task = asyncio.create_task(_partition_cycle_loop(partition_manager))
+
     yield
+
+    # Shutdown
+    if hasattr(app.state, "partition_cycle_task"):
+        app.state.partition_cycle_task.cancel()
+        try:
+            await app.state.partition_cycle_task
+        except asyncio.CancelledError:
+            pass
+    await partition_manager.close()
     await audit_db.close()
     logger.info("Central Service shut down.")
 
@@ -201,6 +244,22 @@ async def health():
             status_code=503,
         )
     return JSONResponse(content={"status": "healthy"})
+
+
+# ------------------------------------------------------------------ #
+# Admin endpoints (Partition Lifecycle)
+# ------------------------------------------------------------------ #
+
+@app.post("/admin/partition-manage")
+async def admin_partition_manage():
+    """Manually trigger partition lifecycle. Admin-only endpoint."""
+    if not partition_manager:
+        return JSONResponse(
+            content={"error": "PartitionManager not initialized"},
+            status_code=503,
+        )
+    stats = await partition_manager.run_full_cycle()
+    return JSONResponse(content={"status": "completed", "stats": stats})
 
 
 if __name__ == "__main__":

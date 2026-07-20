@@ -64,9 +64,11 @@ Every request passing through the gateway is subject to a multi-layered defense:
   - `docker-compose.yml` — Local stack: PostgreSQL 16, MinIO, API server
   - `Dockerfile` — Python 3.9 slim, installs deps, runs uvicorn
   - `migrations/001_initial.sql` — Schema: 4 tables + 3 monthly partitions + 5 indexes
+  - `migrations/002_partition_lifecycle.sql` — Partition lifecycle functions (Phase 2.4)
   - `audit_db.py` — asyncpg pool (min=2, max=10), Pydantic models, typed INSERT helpers
   - `alert_engine.py` — Multi-channel notification dispatcher (Telegram, Slack, Email)
-  - `api_server.py` — FastAPI: `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health`
+  - `api_server.py` — FastAPI: `POST /audit/log`, `POST /audit/batch`, `GET /settings`, `POST /config/sync`, `GET /health`, `POST /admin/partition-manage`
+  - `partition_manager.py` — Partition lifecycle: archive to MinIO → drop from Postgres → create future (Phase 2.4)
 - `guardrail-config/`: YAML-based safety rules and system thresholds.
   - `byoc_rules.yaml` — Structured BYOC stop-limits (patterns, enforcement, severity)
   - `hitl_rules.yaml` — Irreversible action patterns with per-rule timeouts
@@ -99,19 +101,20 @@ All 158 tests are **unit tests** — they mock all external dependencies (HTTP s
 
 Test coverage maps directly to the safety pipeline layers:
 
-| Layer | Module | Tests | What It Verifies |
-|---|---|---|---|
-| L0 | `shared/schemas.py` | 10 | Pydantic model validation (AuditEvent, ProvenanceEvent, SettingsChange) |
-| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
-| L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
-| L3 | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key |
-| L4 | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, full request replay |
-| — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
-| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
-| — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
-| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
-| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
-| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+|| Layer | Module | Tests | What It Verifies |
+||---|---|---|---|
+|| L0 | `shared/schemas.py` | 10 | Pydantic model validation (AuditEvent, ProvenanceEvent, SettingsChange) |
+|| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
+|| L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
+|| L3 | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key |
+|| L4 | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, full request replay |
+|| — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
+|| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
+|| — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
+|| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
+|| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
+|| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+|| Cloud | `central-service/partition_manager.py` | ~20 | Partition lifecycle: archive→MinIO, drop, create future, error handling, year rollover |
 
 ### Migration from standalone scripts
 

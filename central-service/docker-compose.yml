@@ -45,10 +45,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://aiguard:aiguard_local_dev@postgres:5432/aw_aiguard
+      - DATABASE_URL=postgresql://aiguard:***@postgres:5432/aw_aiguard
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=aiguard
       - MINIO_SECRET_KEY=aiguard_local_dev
+      - AUDIT_TTL_DAYS=30
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
