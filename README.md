@@ -46,11 +46,12 @@ The system is designed to be "Cloud-Ready." The transition from local developmen
 ## 🛡️ Safety Pipeline
 
 Every request passing through the gateway is subject to a multi-layered defense:
-1. **PII & Secrets Scanning**: Local redaction and leakage prevention.
-2. **Guardian Pre-flight**: Real-time intent classification (Block/Pass).
-3. **HITL Middleware**: Mandatory human approval for irreversible actions.
-4. **BYOC Stop-Limits**: Hard boundaries defined by organizational policy.
-5. **Cloud Alerting**: Real-time notifications to operators via Telegram, Slack, and Email.
+1. **Provenance Tagging (L0)**: Every request is tagged with provenance metadata (source_id, source_type, trust_level) at ingestion time — enables trust-gated operations and audit traceability.
+2. **PII & Secrets Scanning (L1)**: Local redaction and leakage prevention.
+3. **Guardian Pre-flight (L2)**: Real-time intent classification (Block/Pass).
+4. **BYOC Stop-Limits (L3)**: Hard boundaries defined by organizational policy.
+5. **HITL Middleware (L4)**: Mandatory human approval for irreversible actions.
+6. **Cloud Alerting**: Real-time notifications to operators via Telegram, Slack, and Email.
 
 ## 🏗️ Project Structure
 - `gateway/`: The lightweight interception proxy (Port 9020).
@@ -60,6 +61,8 @@ Every request passing through the gateway is subject to a multi-layered defense:
   - `core/hitl.py` — HITL pause middleware with full request resume flow
   - `core/byoc.py` — BYOC stop-limits enforcement engine (hard_stop, soft_block)
   - `core/block.py` — Standardized 403 block response generator
+  - `core/provenance.py` — Provenance dataclass: extraction from headers, serialization, trust-level checks
+  - `core/audit.py` — Async audit logger (queue → backend, JSONL fallback)
 - `central-service/`: The resource-heavy management and audit backend (Port 8000).
   - `docker-compose.yml` — Local stack: PostgreSQL 16, MinIO, API server
   - `Dockerfile` — Python 3.9 slim, installs deps, runs uvicorn
@@ -75,7 +78,7 @@ Every request passing through the gateway is subject to a multi-layered defense:
   - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-- `tests/`: 158 pytest tests covering all safety layers.
+- `tests/`: 214 pytest tests covering all safety layers.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
@@ -84,6 +87,8 @@ Every request passing through the gateway is subject to a multi-layered defense:
   - `gateway/test_block.py` — BlockReason codes, generate_block_response (403 JSON body)
   - `gateway/test_audit.py` — AuditLogger: queue, buffer write, replay, flush, lifecycle
   - `gateway/test_proxy.py` — LLMProxy: safe pass-through, guardian block, byoc block, hitl pause, streaming
+  - `gateway/test_provenance.py` — Provenance: from_headers, from_dict, default, to_dict, is_low_trust, is_known
+  - `gateway/test_proxy_provenance.py` — Proxy pipeline provenance integration (6 tests)
   - `central_service/test_alert_engine.py` — Telegram/Slack/Email dispatch, severity mapping, emoji, credential warnings
   - `central_service/test_api_server.py` — `_get_severity` mapping, settings YAML loading
   - `central_service/test_audit_db.py` — AuditDB init, DEFAULT_SETTINGS, schema field alignment
@@ -97,14 +102,14 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All 176 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All 214 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 
-|| Layer | Module | Tests | What It Verifies |
-||---|---|---|---|
-|| L0 | `shared/schemas.py` | 10 | Pydantic model validation (AuditEvent, ProvenanceEvent, SettingsChange) |
-|| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
+||| Layer | Module | Tests | What It Verifies |
+|||---|---|---|---|
+||| L0 | `gateway/core/provenance.py` | 23 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
+||| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
 || L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
 || L3 | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key |
 || L4 | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, full request replay |

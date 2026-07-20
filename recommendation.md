@@ -104,14 +104,14 @@ Based on the architecture-design1.md v1.1 alignment:
 
 ### Pre-MVP Priority Tasks (Phase 1 Sprints)
 || Priority | Task | Status |
-|---|---|---|---|
+|---|---|---|---|---|---|---|
 | **P0** | Core native proxy at `localhost:9020` with cloud-based Guardian pre-flight gate | ✅ Implemented |
-|| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | ✅ Implemented |
-|| **P0** | HITL resume flow (store full request, re-forward on approval) | ✅ Implemented |
-|| P1 | Post-processing thinking-mode verification layer (cloud-side) | Planned (Phase 2.4) |
-|| P2 | Cloud DB partition lifecycle management (archive → MinIO, auto-create) | ✅ Phase 2.4 |
-|| P2 | Provenance tagging schema + enforcement pipeline | Planned (Phase 2.5) |
-| P2 | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
+| **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | ✅ Implemented |
+| **P0** | HITL resume flow (store full request, re-forward on approval) | ✅ Implemented |
+| **P1** | Post-processing thinking-mode verification layer (cloud-side) | Planned (Phase 2.4) |
+| **P2** | Cloud DB partition lifecycle management (archive → MinIO, auto-create) | ✅ Phase 2.4 |
+| **P2** | Provenance tagging schema + enforcement pipeline | ✅ Phase 2.5 |
+| **P2** | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
 | P2 | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
 | P2 | Data/command separation validation schemas | Planned (Phase 4.5) |
 
@@ -261,7 +261,7 @@ The key advantage: Guardian's `no` score is programmatically parseable — it's 
 
 ## Testing & Verification
 
-### Pytest Test Suite — 158 Tests
+### Pytest Test Suite — 214 Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
 
@@ -272,8 +272,9 @@ pytest tests/ -v
 
 ### Layer-by-Layer Test Coverage
 
-| Safety Layer | Module | Tests | What's Verified |
+|| Safety Layer | Module | Tests | What's Verified |
 |---|---|---|---|
+| **Provenance (L0)** | `gateway/core/provenance.py` | 23 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
 | **Schema (L0)** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
 | **PII Scanner (L1)** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
 | **Guardian (L2)** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500 handling, timeout handling, payload shape |

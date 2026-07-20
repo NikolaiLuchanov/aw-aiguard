@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 # Ensure central-service is importable (works both in Docker and local dev)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from audit_db import AuditDB, AuditEvent, SettingsChange
+from audit_db import AuditDB, AuditEvent, SettingsChange, ProvenanceEvent
 from partition_manager import PartitionManager
 
 logger = logging.getLogger(__name__)
@@ -154,6 +154,14 @@ async def audit_log(event: AuditEvent):
             status_code=500,
         )
 
+    # Phase 2.5: Store provenance if present
+    if event.provenance:
+        try:
+            prov_event = ProvenanceEvent(**event.provenance)
+            await audit_db.insert_provenance(prov_event)
+        except Exception:
+            logger.warning("Failed to insert provenance for event id=%s", row_id)
+
     # Dispatch alert if severity warrants it
     severity = _get_severity(event)
     if severity in ("CRITICAL", "HIGH", "WARNING"):
@@ -183,6 +191,15 @@ async def audit_batch(events: List[AuditEvent]):
             message = f"{event.component}: {event.reason or event.event_type} (key={event.api_key})"
             if alert_engine:
                 await alert_engine.send(severity, message, event)
+
+    # Phase 2.5: Store provenance for each event that carries it
+    for event in events:
+        if event.provenance:
+            try:
+                prov_event = ProvenanceEvent(**event.provenance)
+                await audit_db.insert_provenance(prov_event)
+            except Exception:
+                logger.warning("Failed to insert provenance for batch event")
 
     return JSONResponse(content={"status": "received", "count": count})
 

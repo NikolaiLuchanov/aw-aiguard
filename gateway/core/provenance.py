@@ -1,0 +1,105 @@
+"""
+aw-aiguard: Provenance tagging for data lineage tracking.
+
+Every request is tagged with provenance metadata at ingestion time:
+source_id, source_type, trust_level, ingested_at.
+
+Phase 2.5 deliverable — Layer 0 of the safety pipeline.
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Dict, Optional
+
+SUPPORTED_SOURCE_TYPES = frozenset({
+    "repository",
+    "chat",
+    "external_api",
+    "llm_output",
+    "file_system",
+    "unknown",
+})
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """Immutable provenance record for a single request."""
+
+    source_id: str
+    source_type: str
+    trust_level: float
+    ingested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self) -> Dict:
+        """Serialize to dict for JSON/audit/log storage."""
+        return {
+            "source_id": self.source_id,
+            "source_type": self.source_type,
+            "trust_level": self.trust_level,
+            "ingested_at": self.ingested_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "Provenance":
+        """Deserialize from a dict (e.g. from JSON body or header parsing)."""
+        return cls(
+            source_id=str(data.get("source_id", "unknown")),
+            source_type=str(data.get("source_type", "unknown")),
+            trust_level=float(data.get("trust_level", 0.0)),
+            ingested_at=datetime.fromisoformat(data["ingested_at"])
+                if "ingested_at" in data and data["ingested_at"]
+                else datetime.now(timezone.utc),
+        )
+
+    @classmethod
+    def default(cls) -> "Provenance":
+        """Maximum suspicion: unknown source, zero trust."""
+        return cls(
+            source_id="unknown",
+            source_type="unknown",
+            trust_level=0.0,
+        )
+
+    @classmethod
+    def from_headers(cls, headers: Dict) -> "Provenance":
+        """
+        Extract provenance from HTTP request headers.
+
+        Expected headers:
+            X-Provenance-Source-ID: git-repo-1
+            X-Provenance-Source-Type: repository
+            X-Provenance-Trust-Level: 0.95
+
+        If any header is missing, falls back to Provenance.default()
+        for the missing fields.
+        """
+        source_id = headers.get("x-provenance-source-id", "").strip()
+        source_type = headers.get("x-provenance-source-type", "").strip()
+        trust_level_str = headers.get("x-provenance-trust-level", "").strip()
+
+        # If ALL headers are missing, return default
+        if not source_id and not source_type and not trust_level_str:
+            return cls.default()
+
+        # Clamp trust_level to [0.0, 1.0]
+        try:
+            trust_level = float(trust_level_str) if trust_level_str else 0.0
+            trust_level = max(0.0, min(1.0, trust_level))
+        except (ValueError, TypeError):
+            trust_level = 0.0
+
+        return cls(
+            source_id=source_id or "unknown",
+            source_type=source_type or "unknown",
+            trust_level=trust_level,
+        )
+
+    @property
+    def is_low_trust(self) -> bool:
+        """Return True if trust_level is below the low-trust threshold (< 0.5)."""
+        return self.trust_level < 0.5
+
+    @property
+    def is_known(self) -> bool:
+        """Return True if source_type is a recognized type (not 'unknown')."""
+        return self.source_type in SUPPORTED_SOURCE_TYPES and self.source_type != "unknown"

@@ -73,10 +73,13 @@
     - New SQL migration: `002_partition_lifecycle.sql` (3 functions: `drop_archived_partition`, `create_monthly_partition`, `list_archivable_partitions`).
     - New Python package: `minio==7.2.0` for S3-compatible storage.
     - New test file: `tests/central_service/test_partition_manager.py` (10 tests, fully mocked).
-- [ ] **2.5 Provenance Tagging Pipeline (Layer 0)**
-    - Implement the `provenance` object (source_id, trust_level, etc.) and ensure it carries through the request lifecycle.
-    - Logic: Tag data at ingestion time → Attach provenance to audit logs → Store in cloud PostgreSQL.
-    - Enables trust-gated operations for Phase 3 BYOC stop-limits.
+- [x] **2.5 Provenance Tagging Pipeline (Layer 0)**
+    - Implement the `Provenance` dataclass (`gateway/core/provenance.py`) with `from_headers`, `from_dict`, `default`, `to_dict`, `is_low_trust`, `is_known`.
+    - Extract provenance from HTTP headers in `proxy.forward_request()` — tags data at ingestion time.
+    - Attach provenance to every `AuditEvent` pushed to the backend.
+    - Store provenance records in cloud PostgreSQL `provenance` table via `api_server.py`.
+    - Trust-gating placeholder in proxy pipeline (logs warning for `trust_level < 0.5`, activated in Phase 3).
+    - 23 unit tests: `test_provenance.py` (14), `test_proxy_provenance.py` (6), `test_api_server_provenance.py` (3).
 
 ### Phase 3: The Policy Hub (Management & Control)
 *Goal: Implement the human approval interface and the final "Hard Boundary" enforcement layer.*

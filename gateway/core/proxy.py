@@ -13,6 +13,7 @@ from gateway.core.hitl import HITLGate, HitlDecision, RequestContext
 from gateway.core.block import generate_block_response, BlockReason
 from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 from gateway.core.audit import AuditLogger
+from gateway.core.provenance import Provenance
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -58,16 +59,25 @@ class LLMProxy:
             await self.client.aclose()
             logger.info("Proxy client closed.")
 
-    def _prepare_headers(self, request_headers: httpx.Headers, safety_decision: Optional[SafetyDecision] = None) -> httpx.Headers:
+    def _prepare_headers(
+        self,
+        request_headers: httpx.Headers,
+        safety_decision: Optional[SafetyDecision] = None,
+        provenance: Optional[Provenance] = None,
+    ) -> httpx.Headers:
         headers = dict(request_headers)
         headers.pop("authorization", None)
         headers["authorization"] = f"Bearer {self.api_key}"
         # Remove stale Content-Length (recalculated by httpx when content changes via PII redaction)
         headers.pop("content-length", None)
-        
+
         if safety_decision == SafetyDecision.WARNING:
             headers["X-Guard-Status"] = "unverified"
-            
+
+        # Phase 2.5: Provenance trust header for debugging/visibility
+        if provenance:
+            headers["X-Provenance-Trust"] = "low" if provenance.is_low_trust else "high"
+
         return httpx.Headers(headers)
 
     async def forward_request(self, request: Request) -> Response:
@@ -107,6 +117,16 @@ class LLMProxy:
         # Prompt hash for audit logging (computed once, reused)
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:64] if prompt else None
 
+        # --- Provenance Extraction (Phase 2.5) ---
+        provenance = Provenance.from_headers(dict(request.headers))
+        if provenance.is_low_trust:
+            logger.warning(
+                "Low-trust provenance: source_id=%s type=%s trust=%.2f",
+                provenance.source_id,
+                provenance.source_type,
+                provenance.trust_level,
+            )
+
         # --- Security Pipeline Execution ---
         # Pipeline Order (Layer 1→5): PII Scan → Guardian → BYOC → HITL → Forward
 
@@ -123,7 +143,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
@@ -139,7 +159,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
@@ -165,7 +185,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
@@ -179,7 +199,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
@@ -195,7 +215,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
@@ -210,7 +230,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
@@ -229,7 +249,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Critical secret detected", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.CRITICAL_SECRET_DETECTED,
@@ -247,7 +267,7 @@ class LLMProxy:
                         await self.audit_logger.log_event(
                             self.api_key, "block", component_name, prompt,
                             reason="Safety violation", blocked_by=blocked_by_name,
-                            prompt_hash=prompt_hash,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
                         return generate_block_response(
                             reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
@@ -265,7 +285,7 @@ class LLMProxy:
                 await self.audit_logger.log_event(
                     self.api_key, "block", component_name, prompt,
                     reason=byoc_result.message, blocked_by=blocked_by_name,
-                    prompt_hash=prompt_hash,
+                    prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                 ) if self.audit_logger else None
                 return generate_block_response(
                     reason=BlockReason.POTENTIAL_SAFETY_VIOLATION,
@@ -276,7 +296,7 @@ class LLMProxy:
                 # BYOC warning — log but continue
                 await self.audit_logger.log_event(
                     self.api_key, "warn", "byoc_engine", prompt,
-                    reason=byoc_result.message, prompt_hash=prompt_hash,
+                    reason=byoc_result.message, prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                 ) if self.audit_logger else None
 
         # Layer 4: HITL Check (after PII + Guardian + BYOC have cleared the request)
@@ -294,7 +314,7 @@ class LLMProxy:
                 await self.audit_logger.log_event(
                     self.api_key, "pause", component_name, prompt,
                     reason="Irreversible action detected", request_id=hitl_request_id,
-                    prompt_hash=prompt_hash,
+                    prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                 ) if self.audit_logger else None
                 return Response(
                     content=json.dumps(self.hitl.get_pause_response(hitl_request_id, prompt)),
@@ -308,18 +328,18 @@ class LLMProxy:
             or scan_decision == SafetyDecision.WARNING
             or (byoc_result and byoc_result.decision == SafetyDecision.WARNING)
         ) else SafetyDecision.ALLOW
-        headers = self._prepare_headers(request.headers, final_decision)
+        headers = self._prepare_headers(request.headers, final_decision, provenance=provenance)
         
         # Log warnings from Guardian or PII scanner (non-blocking)
         if safety_decision == SafetyDecision.WARNING:
             await self.audit_logger.log_event(
                 self.api_key, "warn", "guardian", prompt,
-                reason="Guardian warn (fail-safe)", prompt_hash=prompt_hash,
+                reason="Guardian warn (fail-safe)", prompt_hash=prompt_hash, provenance=provenance.to_dict(),
             ) if self.audit_logger else None
         elif scan_decision == SafetyDecision.WARNING:
             await self.audit_logger.log_event(
                 self.api_key, "warn", "pii_scanner", prompt,
-                reason="PII scanner warn", prompt_hash=prompt_hash,
+                reason="PII scanner warn", prompt_hash=prompt_hash, provenance=provenance.to_dict(),
             ) if self.audit_logger else None
         
         # Handle streaming logic
@@ -341,7 +361,7 @@ class LLMProxy:
             # Final ALLOW — log that the request passed all checks and was forwarded
             await self.audit_logger.log_event(
                 self.api_key, "allow", component_name, prompt,
-                reason=reason_message, prompt_hash=prompt_hash,
+                reason=reason_message, prompt_hash=prompt_hash, provenance=provenance.to_dict(),
             ) if self.audit_logger else None
             return response
         except httpx.RequestError as exc:
@@ -404,6 +424,7 @@ class LLMProxy:
         await self.audit_logger.log_event(
             self.api_key, "allow", "hitl_gate", prompt,
             reason="HITL approved — request resumed",
+            provenance=Provenance.default().to_dict(),
         ) if self.audit_logger else None
 
         try:

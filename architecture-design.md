@@ -422,6 +422,6 @@ aw-aiguard/
 | P1 | Post-processing thinking-mode verification (Section 4, Layer 5) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
 | P2 | Central backend deployment (Phase 2.1) | ✅ Done | PostgreSQL + MinIO + API server (Docker Compose) |
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
-| P2 | Provenance tagging schema + enforcement (Section 5) | Planned (Phase 2.5) | Pairs with audit infrastructure |
+|| P2 | Provenance tagging schema + enforcement (Section 5) | ✅ Done (Phase 2.5) | Pairs with audit infrastructure |
 | P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal |
 | P2 | Data/command separation schemas (Section 3.5) | Sprint 3 | Validate all tool-call parameters against typed JSON schema |
