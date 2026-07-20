@@ -229,10 +229,10 @@ Each developer or agent instance is provisioned a unique, scoped API key (`Beare
 | Tier | Technology | Purpose | TTL | Access Speed |
 |---|---|---|---|---|
 || **Hot Tier** | PostgreSQL (partitioned on `created_at`) | Real-time dashboards, audit logs, recent safety queries, alert data | 30 Days | Sub-second (Native SQL queries) |
-|| **Archive Job** | `partition_manager.py` (Phase 2.4) | Scheduled (every 6h) or manual (`POST /admin/partition-manage`) | Runs `archive_partition()` → `drop_partition()` → `create_future_partitions()` | |
+|| **Archive Job** | `partition_manager.py` (Phase 2.4) | Scheduled (every 6h) or manual (`POST /admin/partition-manage`) | Runs `archive_partition()` → `drop_partition()` → `create_future_partitions()` | 30 Days | Sub-second (Native SQL queries) |
 || **Archive / Cold Tier** | S3 / MinIO / GCS | Long-term compliance, regulatory scans, bulk payload analysis | Indefinite | Minutes (Async export to Parquet/JSONL) |
 
-*Implementation:* Postgres utilizes monthly partitioning on `audit_logs.created_at` via native SQL DDL (`PARTITION BY RANGE`). Implemented in Phase 2.1 (`migrations/001_initial.sql`). Partition lifecycle management (archive >30 days to MinIO, drop from Postgres) is planned for Phase 2.4.
+*Implementation:* Postgres utilizes monthly partitioning on `audit_logs.created_at` via native SQL DDL (`PARTITION BY RANGE`). Implemented in Phase 2.1 (`migrations/001_initial.sql`). Partition lifecycle management (archive >30 days to MinIO, drop from Postgres) is implemented in Phase 2.4 (`migrations/002_partition_lifecycle.sql` + `central-service/partition_manager.py`).
 
 ### C. BYOC Rule Layer — Stop-Limits (New in v1.1)
 

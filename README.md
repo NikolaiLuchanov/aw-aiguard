@@ -97,7 +97,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All 158 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All 176 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 
@@ -111,10 +111,10 @@ Test coverage maps directly to the safety pipeline layers:
 || — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
 || — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
 || — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
-|| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
-|| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
-|| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
-|| Cloud | `central-service/partition_manager.py` | ~20 | Partition lifecycle: archive→MinIO, drop, create future, error handling, year rollover |
+||| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
+||| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
+||| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+||| Cloud | `central-service/partition_manager.py` | ~20 | Partition lifecycle: archive→MinIO, drop, create future, error handling, year rollover |
 
 ### Migration from standalone scripts
 

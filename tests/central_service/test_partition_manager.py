@@ -46,6 +46,16 @@ class _ContextManager:
         return getattr(self.obj, name)
 
 
+class _AsyncEmptyIterator:
+    """Async iterator that yields nothing — used for empty asyncpg result sets."""
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+
 # ------------------------------------------------------------------ #
 # Fixtures
 # ------------------------------------------------------------------ #
@@ -88,6 +98,11 @@ def mock_asyncpg_pool():
 
     mock_cursor = AsyncMock()
     mock_cursor.__aiter__ = AsyncMock(return_value=iter([]))
+
+    # cur.dictcursor("SELECT ...", *args) must return an async iterator
+    # (used in: async for record in cur.dictcursor(...))
+    # Default to empty iterator; tests that exercise the archive path override it.
+    mock_cursor.dictcursor = MagicMock(return_value=_AsyncEmptyIterator())
 
     mock_dictcursor = MagicMock(return_value=_ContextManager(mock_cursor))
 
@@ -225,8 +240,6 @@ async def test_list_archivable_raises_when_not_connected():
 @pytest.mark.asyncio
 async def test_archive_partition_exports_and_uploads(partition_manager, tmp_path):
     """archive_partition writes JSONL, compresses, uploads to MinIO."""
-    # Simulate the DB by writing JSONL records directly to the temp file
-    # that archive_partition will read
     conn = partition_manager._conn
 
     mock_record1 = {
@@ -254,27 +267,31 @@ async def test_archive_partition_exports_and_uploads(partition_manager, tmp_path
         "created_at": datetime(2025, 1, 20, 14, 0, 0),
     }
 
-    # Write the JSONL file directly (archive_partition writes to this path)
-    jsonl_path = os.path.join(partition_manager._temp_dir, "audit_archive_202501.jsonl")
-    with open(jsonl_path, "w") as f:
-        f.write(_record_to_json(mock_record1) + "\n")
-        f.write(_record_to_json(mock_record2) + "\n")
+    # Set up dictcursor to yield sample records during archive_partition's
+    # async for record in cur.dictcursor("SELECT ...", name): loop.
+    class _RecordIterator:
+        def __init__(self, records):
+            self.records = iter(records)
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            try:
+                return next(self.records)
+            except StopIteration:
+                raise StopAsyncIteration
+
+    conn.cursor().dictcursor.return_value = _RecordIterator([mock_record1, mock_record2])
     conn.fetchval = AsyncMock(return_value=2)
 
     result_key = await partition_manager.archive_partition("audit_logs_y2025m01", "2025", "01")
 
     assert result_key == "audit-archive/2025/01/2025-01.jsonl.gz"
-    assert partition_manager._minio_client.fput_object.call_count == 2
 
-    # Verify JSONL content was written
-    jsonl_files = list(tmp_path.glob("audit_archive_202501.jsonl"))
-    assert len(jsonl_files) == 1
-    content = jsonl_files[0].read_text()
-    lines = content.strip().split("\n")
-    assert len(lines) == 2
-    parsed = [json.loads(line) for line in lines]
-    assert parsed[0]["api_key"] == "key1"
-    assert parsed[1]["api_key"] == "key2"
+    # fput_object called twice: once for .jsonl.gz, once for manifest.json
+    assert partition_manager._minio_client.fput_object.call_count == 2
+    calls = partition_manager._minio_client.fput_object.call_args_list
+    assert calls[0][0][1] == "audit-archive/2025/01/2025-01.jsonl.gz"
+    assert calls[1][0][1].endswith("manifest.json")
 
 
 @pytest.mark.unit
@@ -413,6 +430,27 @@ async def test_run_full_cycle_no_archivable(partition_manager, sample_non_archiv
 @pytest.mark.asyncio
 async def test_run_full_cycle_with_archive(partition_manager, sample_archivable_partition):
     """Full cycle: list → archive → drop → create future."""
+    conn = partition_manager._conn
+
+    class _RecordIterator:
+        def __init__(self, records):
+            self.records = iter(records)
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            try:
+                return next(self.records)
+            except StopIteration:
+                raise StopAsyncIteration
+
+    conn.cursor().dictcursor.return_value = _RecordIterator([{
+        "api_key": "k", "event_type": "block", "component": "guardian",
+        "reason": "safety violation", "prompt_hash": "abc",
+        "provenance": None, "blocked_by": "guardian", "request_id": "r1",
+        "details": None, "created_at": datetime(2025, 1, 15, 10, 0, 0),
+    }])
+    conn.fetchval = AsyncMock(return_value=1)
+
     partition_manager.list_archivable_partitions = AsyncMock(
         return_value=[sample_archivable_partition]
     )
