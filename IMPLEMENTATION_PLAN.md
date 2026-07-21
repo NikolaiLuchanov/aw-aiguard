@@ -10,6 +10,19 @@
 **Current:** Design and safety recommendations documented.  
 **Complete:** A fully operational `aw-aiguard` ecosystem where every LLM request is vetted by a local safety model, sensitive data is redacted, irreversible actions are paused for human approval via a web dashboard, and all events are audited in a local database.
 
+### Threat Model Coverage — What This Protects Against
+
+Per `summary.md`, the threat model defines 4 attack goals. All 4 are covered by implemented code:
+
+| Attack Goal | What Happens | Security Layer | Status |
+|---|---|---|---|
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL | ✅ Implemented |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC | ✅ Implemented |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL | ✅ Implemented |
+| **Answer manipulation** | Fact substitution or false context injected into LLM output | L5 Post-response thinking + LLM05 output control | ⏳ Planned (L5 Phase 3.4, L6 Phase 4.3) |
+
+Indirect (data-borne) injection — poisoning external sources the agent ingests — is mitigated by provenance tagging (L0, ✅ Phase 2.5) + trust-gated Guardian scoring (L2, ✅ Phase 1.3). Low-trust data triggers stricter checks and mandatory HITL on writes.
+
 ---
 
 ## 🗺️ la Phase-by-Phase Execution Plan

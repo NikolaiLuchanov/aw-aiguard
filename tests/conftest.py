@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "gateway"))
 sys.path.insert(0, str(PROJECT_ROOT / "central-service"))
+sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
 # ------------------------------------------------------------------ #
 # Guardrail config paths (used by scanner, HITL, BYOC, alert engine)

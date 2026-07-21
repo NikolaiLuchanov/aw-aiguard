@@ -52,6 +52,15 @@
 </head>
 <body>
     <h1>aw-aiguard: High-Level Architecture Workflow</h1>
+    <p style="max-width:1400px; margin:-20px 0 30px; color:#555; font-size:0.95em; line-height:1.6;">
+        Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 7-layer security pipeline.
+        Per the threat model (<code>summary.md</code>), attackers target 4 goals:
+        <strong>data exfiltration</strong> (L1+L3+L4),
+        <strong>action hijack</strong> (L4 HITL),
+        <strong>quiet commands</strong> (L3 BYOC + L4 HITL), and
+        <strong>answer manipulation</strong> (L5+L6).
+        Indirect (data-borne) injection is mitigated by provenance tagging (L0) + trust-gated Guardian scoring (L2).
+    </p>
     <div class="container">
         <div class="mermaid">
 flowchart TD

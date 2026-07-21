@@ -16,6 +16,19 @@ We are adopting **Option B: Shared LLM Gateway / Reverse Proxy**.
 
 **Verdict:** Option B provides the lowest latency, zero external dependency for core safety blocking (the local proxy decides in real-time), and a unified audit log pipeline.
 
+### 1.1 Threat Model Overview — Attack Goals
+
+Per `summary.md`, attacker objectives fall into **4 categories**. Each maps to a specific safety layer:
+
+| # | Attack Goal | What It Means | Countermeasure Layer |
+|---|---|---|---|
+| 1 | **Data exfiltration** | Agent sends secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL |
+| 2 | **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate (irreversible action detection) + L3 BYOC |
+| 3 | **Quiet commands** | Prompt instructs agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL (all actions require approval) |
+| 4 | **Answer manipulation** | Fact substitution, recommendation poisoning, or false context injection | L5 Post-response thinking mode + LLM05 output control (L6) |
+
+**Indirect (data-borne) injection** is the most dangerous threat class: instead of attacking the user's prompt directly, the attacker poisons an external data source (web page, RAG document, GitHub comment) that the agent later ingests. The injection fires when the agent reads that content. Provenance tagging (L0) + trust-gated Guardian checks (L2) are the primary countermeasure — low-trust data triggers stricter Guardian scoring and mandatory HITL on writes. Stored injection prevention (Phase 4.2) is planned to sanitize ingested content at the point of RAG ingestion.
+
 ---
 
 ## 2. High-Level Architecture

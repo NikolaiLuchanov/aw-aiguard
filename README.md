@@ -46,6 +46,21 @@ The system is designed to be "Cloud-Ready." The transition from local developmen
 ## 🛡️ Safety Pipeline
 
 Every request passing through the gateway is subject to a multi-layered defense:
+
+### What This Protects Against
+
+Per the threat model (`summary.md`), attackers target 4 goals. Each maps to a safety layer:
+
+| Attack Goal | What Happens | Safety Layer |
+|---|---|---|
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL |
+| **Answer manipulation** | Fact substitution or false context injected into LLM output | L5 Post-response thinking + LLM05 output control |
+
+Indirect (data-borne) injection — poisoning external sources the agent ingests — is mitigated by provenance tagging (L0) + trust-gated Guardian scoring (L2). Low-trust data triggers stricter checks and mandatory HITL on writes.
+
+### Safety Pipeline
 1. **Provenance Tagging (L0)**: Every request is tagged with provenance metadata (source_id, source_type, trust_level) at ingestion time — enables trust-gated operations and audit traceability.
 2. **PII & Secrets Scanning (L1)**: Local redaction and leakage prevention.
 3. **Guardian Pre-flight (L2)**: Real-time intent classification (Block/Pass).
