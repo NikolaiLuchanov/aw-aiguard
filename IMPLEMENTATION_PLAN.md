@@ -97,9 +97,13 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 ### Phase 3: The Policy Hub (Management & Control)
 *Goal: Implement the human approval interface and the final "Hard Boundary" enforcement layer.*
 
-- [ ] **3.1 Centralized Admin Dashboard (Web UI)**
-    - Build a lightweight web interface integrated with the central service.
-    - **Approval Queue:** View pending HITL requests with provenance $\\rightarrow$ Click \"Approve\" or \"Deny\".
+- [x] **3.1 Centralized Admin Dashboard (Web UI)**
+    - ✅ Detailed plan in `IMPLEMENTATION_PLAN_PHASE_3_1.md` — 7 HTML templates, 11 API endpoints, 5 DB tables, 56 tests.
+    - **Approval Queue:** View pending HITL requests with provenance → Click "Approve" or "Deny".
+    - **BYOC Management:** CRUD rules via web UI.
+    - **Settings:** View/apply per-developer overrides.
+    - **Audit Browser:** Paginated, filterable log viewer.
+    - **Gateway Status:** Liveness monitoring dashboard.
 - [x] **3.2 BYOC Stop-Limits Engine**
     - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop` and `soft_block` levels is active.)*
     - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.
