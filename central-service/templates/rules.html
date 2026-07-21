@@ -71,6 +71,7 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Description</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Enforcement</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Severity</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Source</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Version</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -109,6 +110,9 @@
                 <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">${rule.description || '—'}</td>
                 <td class="px-6 py-4"><span class="px-2 py-1 text-xs rounded-full ${enforcementClass}">${rule.enforcement}</span></td>
                 <td class="px-6 py-4"><span class="px-2 py-1 text-xs rounded-full ${severityClass}">${rule.severity}</span></td>
+                <td class="px-6 py-4 text-sm">
+                    <span class="px-2 py-1 text-xs rounded-full ${rule.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 line-through'}">${rule.is_active ? 'Active' : 'Inactive'}</span>
+                </td>
                 <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">v${rule.version}</td>
                 <td class="px-6 py-4 text-sm">
                     <button hx-post="/dashboard/byoc/rules/${rule.name}"

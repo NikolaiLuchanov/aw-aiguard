@@ -253,7 +253,7 @@ Each developer or agent instance is provisioned a unique, scoped API key (`Beare
 
 A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-flight gate, HITL middleware, and provenance enforcement. It defines hard boundaries that no model decision can bypass:
 
-**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
+**Implementation:** `gateway/core/byoc.py` — dual-source rule engine (Phase 3.2). Loads base rules from `guardrail-config/byoc_rules.yaml` on startup, then merges with cloud rules from PostgreSQL `byoc_rules` table (fetched via `GET /dashboard/byoc/rules` every `BYOC_SYNC_INTERVAL` seconds). Per-developer overrides from `settings_override` table can soft-disable individual rules (e.g., `byoc_rule_never_exfiltrate_disabled`). Merge precedence: cloud replaces local by name; overrides remove. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
 
 **Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
@@ -384,6 +384,7 @@ To move from architecture to implementation:
 - **Local Gateway (The Performance Edge):**
     - **What it does:** Real-time JSON interception, remote Granite 4.1 Guardian scoring, and immediate blocking/pass-through.
     - **Best Runtime:** **Native Process (Python/FastAPI).** This avoids Docker virtualization overhead on macOS, ensuring the lowest possible latency for the interception point.
+    - **Dynamic BYOC rules (Phase 3.2):** Gateway polls Central Service for rule updates, merges cloud rules with local YAML, applies per-developer overrides. No restart required for rule changes.
 - **Cloud Backend (The Resource-Heavy Core):**
     - **What it does:** Hosts the GPU-accelerated model server (Granite 4.1), the audit database (Postgres), and the management dashboard.
     - **Best Runtime:** **Cloud-Deployed Containers (K8s/Docker).** This offloads all heavy memory and compute requirements from the local machine to specialized cloud infrastructure.

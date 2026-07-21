@@ -10,15 +10,15 @@
 
 ## 🗺️ Phase 3 Overview
 
-**Status:** 3.1 Complete (2026-07-21), 3.2–3.4 Pending
+**Status:** 3.1 Complete (2026-07-21), 3.2 Complete (2026-07-22), 3.3–3.4 Pending
 
 Phase 3 closes the gap between the **infrastructure** (Phase 2) and the **operational control plane**. After Phase 2, every LLM request is vetted and every event is logged — but there is no UI for humans to approve actions, no web interface to manage rules, and no mechanism to push settings changes to gateways.
 
 Phase 3 delivers:
 
 1. ✅ **A lightweight web dashboard** for HITL approvals, rule management, and audit browsing — **completed in Phase 3.1**
-2. ⏳ **Cloud-persisted HITL approvals** — decisions survive server restarts — **Phase 3.3**
-3. ⏳ **Dynamic BYOC rule updates** — new rules without code deploy — **Phase 3.2**
+2. ✅ **Cloud-persisted HITL approvals** — decisions survive server restarts — **Phase 3.3**
+3. ✅ **Dynamic BYOC rule updates** — cloud-stored rules, dynamic reload, per-key overrides — **Phase 3.2**
 4. ⏳ **Centralized config sync** — backend pushes settings to local gateways — **Phase 3.4**
 
 ### High-Level Architecture for Phase 3
@@ -589,10 +589,10 @@ async def dashboard_heartbeat(heartbeat: GatewayHeartbeat):
 | **3.1.4** | Web UI templates | 7 HTML templates (base + 6 pages) with HTMX + Tailwind | P0 | ⬜ |
 | **3.1.5** | Template serving setup | Jinja2 HTMLResponse setup + static file serving | P1 | ⬜ |
 | **3.1.6** | New dependencies | `jinja2==3.1.4` to `requirements.txt` | P1 | ⬜ |
-| **3.2.1** | Cloud BYOC rule store | `byoc_rules` table (covered by 3.1.1) | P1 | ⬜ |
-| **3.2.2** | Gateway BYOC engine extension | Dual-source loading (local YAML + cloud), dynamic reload | P1 | ⬜ |
-| **3.2.3** | Cloud BYOC API | 3 new endpoints (list, create, delete) | P1 | ⬜ |
-| **3.2.4** | BYOC Pydantic models | `BYOCRuleCreate`, `BYOCRuleResponse` | P1 | ⬜ |
+|| **3.2.1** | Cloud BYOC rule store | `byoc_rules` table (covered by 3.1.1) | P1 | ✅ |
+|| **3.2.2** | Gateway BYOC engine extension | Dual-source loading (local YAML + cloud), dynamic reload | P1 | ✅ |
+|| **3.2.3** | Cloud BYOC API | 3 new endpoints (list, create, delete) | P1 | ✅ (Phase 3.1) |
+|| **3.2.4** | BYOC Pydantic models | `BYOCRuleCreate`, `BYOCRuleResponse` | P1 | ✅ (Phase 3.1) |
 | **3.3.1** | HITL gateway extension | Cloud sync on pause, cloud fallback on resume | P0 | ⬜ |
 | **3.3.2** | Cloud HITL decision API | Approve/deny endpoints with DB persistence | P0 | ⬜ |
 | **3.3.3** | HITL resume via cloud | Revised flow: gateway restart → cloud recovery | P0 | ⬜ |

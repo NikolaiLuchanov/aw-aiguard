@@ -107,10 +107,8 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - **Gateway Status:** Liveness monitoring dashboard.
     - Route collision resolution: template routes under `/ui/*`, API routes at `/dashboard/*`.
 - [x] **3.2 BYOC Stop-Limits Engine**
-    - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop` and `soft_block` levels is active.)*
-    - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.
-    - Codify additional "Never Do This" rules in `byoc_rules.yaml` (e.g., `never_exfiltrate`).
-    - Logic: Apply as a final authority after Guardian checks; block execution immediately if violated. Irreversible actions (deletion, commits, etc.) are handled by the HITL middleware gate (Layer 4), not by BYOC.
+    - ✅ Phase 3.1: Dashboard CRUD endpoints, cloud DB table, Pydantic models
+    - ✅ Phase 3.2: Cloud-stored rules with dynamic reload, per-API-key overrides, background sync loop, source attribution
 - [ ] **3.3 Approval Execution Flow**
     - *(Local version done in Phase 1.6 gap fix — `POST /hitl/resume/{request_id}` handles the full flow.)*
     - Extend with cloud persistence: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request` via the Central Service.

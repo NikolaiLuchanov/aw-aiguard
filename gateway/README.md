@@ -26,6 +26,10 @@ SCAN_ACTION_MODE=block
 # HITL "Pause" Middleware (Phase 1.5+)
 HITL_DEFAULT_TIMEOUT=300
 HITL_NOTIFICATION_MODE=silent
+
+# BYOC Cloud Sync (Phase 3.2)
+BYOC_CLOUD_URL=http://localhost:8000
+BYOC_SYNC_INTERVAL=120
 ```
 
 ### 2. Running the Proxy

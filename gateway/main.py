@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
@@ -40,6 +41,10 @@ HITL_NOTIFICATION_MODE = os.getenv("HITL_NOTIFICATION_MODE", "silent")
 # BYOC Configuration
 BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
 
+# BYOC Cloud Sync (Phase 3.2)
+BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "")  # e.g. "http://localhost:8000"
+BYOC_SYNC_INTERVAL = int(os.getenv("BYOC_SYNC_INTERVAL", "120"))  # seconds
+
 # Audit Logger Configuration — same Central Service as Guardian
 AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", "~/.config/aw-aiguard/audit_buffer.jsonl")
 
@@ -70,7 +75,9 @@ hitl = HITLGate(
 
 # Initialize the BYOC Engine
 byoc = BYOCEngine(
-    rules_path=BYOC_RULES_PATH
+    rules_path=BYOC_RULES_PATH,
+    cloud_url=BYOC_CLOUD_URL or None,
+    api_key=API_KEY or "default",
 )
 
 # Initialize the Audit Logger
@@ -96,10 +103,47 @@ async def lifespan(app: FastAPI):
     await proxy_engine.start()
     await hitl.start_cleanup()
     await audit_logger.start()
+
+    # Phase 3.2: Initial cloud BYOC rule sync
+    if byoc.cloud_url:
+        try:
+            summary = await byoc.sync_all_cloud_state()
+            logger.info(f"BYOC cloud sync complete: {summary}")
+        except Exception:
+            logger.warning("BYOC initial cloud sync failed — running with local rules only.")
+
+    # Phase 3.2: Periodic cloud BYOC rule sync
+    byoc_sync_task = None
+    if byoc.cloud_url and BYOC_SYNC_INTERVAL > 0:
+        byoc_sync_task = asyncio.create_task(_byoc_sync_loop())
+        logger.info(f"BYOC sync loop started (interval={BYOC_SYNC_INTERVAL}s).")
+
     yield
+
+    # Shutdown
+    if byoc_sync_task:
+        byoc_sync_task.cancel()
+        try:
+            await byoc_sync_task
+        except asyncio.CancelledError:
+            pass
     await audit_logger.stop()
     await hitl.stop_cleanup()
     await proxy_engine.stop()
+
+
+async def _byoc_sync_loop():
+    """Periodically re-sync BYOC rules from cloud. Runs every BYOC_SYNC_INTERVAL seconds."""
+    while True:
+        try:
+            await asyncio.sleep(BYOC_SYNC_INTERVAL)
+            summary = await byoc.sync_all_cloud_state()
+            logger.info(f"BYOC periodic sync complete: {summary}")
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.warning("BYOC periodic sync failed — will retry next cycle.")
+            await asyncio.sleep(30)  # Shorter retry on failure
 
 app = FastAPI(
     title="aw-aiguard Local Gateway Proxy",

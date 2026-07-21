@@ -514,7 +514,7 @@ def _build_summary(result: ProbeResult) -> str:
         }.get(layer.status, "?")
 
         trigger = f" [{layer.triggered_rule}]" if layer.triggered_rule else ""
-        threat = f" → {layer.threat_category}" if layer.threat_category else ""
+        threat = f" → {layer.threat_category.value if hasattr(layer.threat_category, 'value') else layer.threat_category}" if layer.threat_category else ""
         lines.append(f"  {status_char} L{layer.layer_num} {layer.layer:30s}{trigger}{threat}")
         if layer.details:
             lines.append(f"    {layer.details}")
