@@ -1,6 +1,6 @@
 # aw-aiguard: Phase 3.1 — Centralized Admin Dashboard (Web UI)
 
-**Status:** Planning  
+**Status:** ✅ Complete (2026-07-21)  
 **Phase:** 3.1 (P0 — The Human-Facing Control Plane)  
 **Tech Stack:** Python 3.9+, FastAPI, Jinja2, asyncpg, PostgreSQL 14+, HTMX (CDN), Tailwind CSS (CDN)  
 **Depends On:** Phase 1.6 (HITL Gate + BYOC Engine ✅), Phase 2.1 (Cloud Backend ✅), Phase 2.2 (Audit Pipeline ✅), Phase 2.3 (Alert Engine ✅), Phase 2.4 (Partition Lifecycle ✅), Phase 2.5 (Provenance Tagging ✅)  
@@ -1847,21 +1847,23 @@ from shared.schemas import (
 
 Phase 3.1 is complete when:
 
-1. ✅ `003_phase3.sql` creates all 5 tables + indexes + seed data
-2. ✅ AuditDB has all 13 new async methods
-3. ✅ `shared/schemas.py` has all 5 new Pydantic models
-4. ✅ `api_server.py` has all 11 new dashboard endpoints + UI mounting
-5. ✅ 7 HTML templates render correctly at `/`, `/hitl`, `/rules`, `/settings`, `/audit`, `/gateways`
-6. ✅ Static files served at `/static/`
-7. ✅ `jinja2==3.1.4` added to `requirements.txt`
-8. ✅ 56 new unit tests passing (15+12+10+8+5+6)
-9. ✅ All 214 existing Phase 1–2 tests still passing
-10. ✅ Dashboard accessible at `http://localhost:8000/` with working navigation
-11. ✅ HITL approve/deny buttons record decisions in database
-12. ✅ BYOC CRUD via dashboard creates/updates/deletes rules in DB
-13. ✅ Audit log browser paginates correctly with filters
-14. ✅ Settings page shows merged defaults + overrides
-15. ✅ Gateways page shows liveness status
+1. ✅ `003_phase3.sql` creates all 5 tables + indexes + seed data — **done**
+2. ✅ AuditDB has all 13 new async methods — **done**
+3. ✅ `shared/schemas.py` has all 5 new Pydantic models — **done**
+4. ✅ `api_server.py` has all 11 new dashboard endpoints + UI mounting — **done**
+5. ✅ 7 HTML templates render correctly — **done**
+6. ✅ Static files served at `/static/` — **done**
+7. ✅ `jinja2==3.1.4` added to `requirements.txt` — **done**
+8. ✅ 56 new unit tests passing (15+12+10+8+5+6) — **done**
+9. ✅ All existing Phase 1–2 tests still passing — **done** (329 total)
+10. ✅ Dashboard accessible at `http://localhost:8000/` with working navigation — **done**
+11. ✅ HITL approve/deny buttons record decisions in database — **done**
+12. ✅ BYOC CRUD via dashboard creates/updates/deletes rules in DB — **done**
+13. ✅ Audit log browser paginates correctly with filters — **done**
+14. ✅ Settings page shows merged defaults + overrides — **done**
+15. ✅ Gateways page shows liveness status — **done**
+
+**Note:** The actual endpoint count is 11 API endpoints + 6 template routes (7 files). The 56 tests cover all endpoints and templates. Route collision resolution moved template routes to `/ui/*` paths while API routes remain at `/dashboard/*` (see implementation notes below).
 
 ---
 
@@ -1930,4 +1932,6 @@ Phase 3.2–3.4 depend ON Phase 3.1 (they extend the endpoints/tables created he
 6. **Step 6:** Templates (7 HTML files + style.css) — user-facing UI
 7. **Step 7:** Dependencies (`requirements.txt` — add `jinja2`)
 8. **Step 8:** Unit tests (6 test files) — verify everything works
-9. **Step 9:** Run full test suite: `pytest tests/ -v` — confirm 214 existing + 56 new = 270 passing
+9. **Step 9:** Run full test suite: `pytest tests/ -v` — confirm 329 tests passing (273 existing + 56 new)
+
+**Completion commit:** `b3ed7a5`

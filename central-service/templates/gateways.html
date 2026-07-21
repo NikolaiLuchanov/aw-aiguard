@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Gateway Status{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Gateway Status</h1>
+        <button onclick="loadGateways()" class="px-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600">
+            Refresh
+        </button>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-750">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Gateway ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Version</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Last Seen</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">IP Address</th>
+                </tr>
+            </thead>
+            <tbody id="gateways-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function loadGateways() {
+        const res = await fetch('/dashboard/gateways');
+        const data = await res.json();
+        const tbody = document.getElementById('gateways-table-body');
+
+        if (!data.gateways || data.gateways.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No gateways registered</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.gateways.map(gw => `
+            <tr>
+                <td class="px-6 py-4 text-sm font-mono text-slate-700 dark:text-slate-200">${gw.gateway_id}</td>
+                <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded-full ${gw.is_online ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}">
+                        ${gw.is_online ? 'Online' : 'Offline'}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">${gw.version || 'N/A'}</td>
+                <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">${gw.last_seen ? new Date(gw.last_seen).toLocaleString() : 'N/A'}</td>
+                <td class="px-6 py-4 text-sm font-mono text-slate-500 dark:text-slate-400">${gw.ip_address || 'N/A'}</td>
+            </tr>
+        `).join('');
+    }
+
+    loadGateways();
+    // Auto-refresh every 30 seconds
+    setInterval(loadGateways, 30000);
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Overview{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">System Overview</h1>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Last updated: <span id="last-update"></span></span>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400 mb-1">Pending Approvals</div>
+            <div class="text-3xl font-bold text-amber-600" id="stat-pending">0</div>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400 mb-1">Online Gateways</div>
+            <div class="text-3xl font-bold text-green-600" id="stat-gateways">0</div>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400 mb-1">BYOC Rules</div>
+            <div class="text-3xl font-bold text-blue-600" id="stat-rules">0</div>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400 mb-1">Today's Events</div>
+            <div class="text-3xl font-bold text-slate-700 dark:text-slate-200" id="stat-events">0</div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-100">Pending Approvals</h2>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Review and approve/reject paused requests.</p>
+            <a href="/hitl" class="inline-block px-4 py-2 bg-accent text-white rounded-md text-sm hover:bg-blue-600">
+                View HITL Queue →
+            </a>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-100">Audit Log</h2>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Browse all security events and decisions.</p>
+            <a href="/audit" class="inline-block px-4 py-2 bg-primary dark:bg-primaryDark text-white rounded-md text-sm hover:bg-slate-700 dark:hover:bg-slate-800">
+                Browse Audit Logs →
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Load overview stats on page load
+    async function loadStats() {
+        const [hitlRes, gwRes, rulesRes, auditRes] = await Promise.all([
+            fetch('/dashboard/hitl/pending'),
+            fetch('/dashboard/gateways'),
+            fetch('/dashboard/byoc/rules'),
+            fetch('/dashboard/audit/logs?limit=1')
+        ]);
+
+        const hitl = await hitlRes.json();
+        const gw = await gwRes.json();
+        const rules = await rulesRes.json();
+        const audit = await auditRes.json();
+
+        document.getElementById('stat-pending').textContent = hitl.pending_requests?.length || 0;
+        document.getElementById('stat-gateways').textContent = (gw.gateways || []).filter(g => g.is_online).length;
+        document.getElementById('stat-rules').textContent = (rules.rules || []).length;
+        document.getElementById('stat-events').textContent = (audit.logs || []).length;
+        document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    }
+
+    loadStats();
+    // Auto-refresh every 30 seconds
+    setInterval(loadStats, 30000);
+</script>
+{% endblock %}

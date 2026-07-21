@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}aw-aiguard Dashboard{% endblock %}</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX (CDN) -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Custom overrides -->
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e293b',   // slate-800
+                        primaryDark: '#0f172a', // slate-900
+                        accent: '#3b82f6',    // blue-500
+                        danger: '#ef4444',    // red-500
+                        success: '#22c55e',   // green-500
+                        warning: '#f59e0b',   // amber-500
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+        // Theme initialization — runs before paint to avoid flash
+        (function() {
+            const saved = localStorage.getItem('theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = saved === 'dark' || (saved !== 'light' && systemDark);
+            document.documentElement.classList.toggle('dark', isDark);
+        })();
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen dark:bg-slate-900 dark:text-slate-200 transition-colors duration-200">
+    <!-- Navigation -->
+    <nav class="bg-primary text-white shadow-lg dark:bg-primaryDark">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-6">
+                    <a href="/dashboard" class="text-xl font-bold tracking-tight">aw-aiguard</a>
+                    <div class="hidden md:flex space-x-1">
+                        <a href="/ui/dashboard"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'dashboard' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">Overview</a>
+                        <a href="/ui/hitl"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'hitl' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">HITL</a>
+                        <a href="/ui/rules"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'rules' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">BYOC Rules</a>
+                        <a href="/ui/settings"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'settings' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">Settings</a>
+                        <a href="/ui/audit"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'audit' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">Audit Log</a>
+                        <a href="/ui/gateways"
+                           class="px-3 py-2 rounded text-sm font-medium {% if page == 'gateways' %}bg-white/20{% else %}hover:bg-white/10{% endif %}">Gateways</a>
+                    </div>
+                </div>
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" onclick="toggleTheme()"
+                        class="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                        title="Toggle dark/light mode"
+                        aria-label="Toggle theme">
+                    <!-- Sun icon (shown in dark mode) -->
+                    <svg id="icon-sun" class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                    <!-- Moon icon (shown in light mode) -->
+                    <svg id="icon-moon" class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                </button>
+                <div class="text-xs text-slate-300">v0.2.0</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-4 dark:bg-slate-800 dark:border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 text-center text-sm text-slate-400 dark:text-slate-500">
+            aw-aiguard Guardrail Dashboard &mdash; Phase 3.1
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle — persists preference, toggles class on <html>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+    </script>
+</body>
+</html>

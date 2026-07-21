@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log Browser{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Audit Log Browser</h1>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Event Type</label>
+                <select id="filter-event-type" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                    <option value="">All</option>
+                    <option value="allow">Allow</option>
+                    <option value="block">Block</option>
+                    <option value="warn">Warn</option>
+                    <option value="pause">Pause</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Component</label>
+                <select id="filter-component" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                    <option value="">All</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="pii_scanner">PII Scanner</option>
+                    <option value="hitl_gate">HITL Gate</option>
+                    <option value="byoc_engine">BYOC Engine</option>
+                    <option value="proxy">Proxy</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">API Key</label>
+                <input type="text" id="filter-api-key" placeholder="Filter by key"
+                       class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+            </div>
+            <div class="flex items-end">
+                <button onclick="loadAudit()" class="w-full px-4 py-2 bg-accent text-white rounded-md text-sm hover:bg-blue-600">
+                    Apply Filters
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audit Log Table -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-750">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Time</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Event</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Component</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Reason</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Key</th>
+                </tr>
+            </thead>
+            <tbody id="audit-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between">
+        <span id="pagination-info" class="text-sm text-slate-500 dark:text-slate-400"></span>
+        <div class="flex space-x-2">
+            <button onclick="changePage(-1)" id="btn-prev"
+                    class="px-3 py-1 text-sm bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-50 dark:hover:bg-slate-600">
+                ← Prev
+            </button>
+            <button onclick="changePage(1)" id="btn-next"
+                    class="px-3 py-1 text-sm bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-50 dark:hover:bg-slate-600">
+                Next →
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPage = 0;
+    const pageSize = 50;
+
+    function eventBadge(type) {
+        const classes = {
+            allow: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+            block: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+            warn: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+            pause: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+        };
+        return `<span class="px-2 py-1 text-xs rounded-full ${classes[type] || 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200'}">${type}</span>`;
+    }
+
+    async function loadAudit() {
+        const eventType = document.getElementById('filter-event-type').value;
+        const component = document.getElementById('filter-component').value;
+        const apiKey = document.getElementById('filter-api-key').value;
+
+        const params = new URLSearchParams({
+            limit: pageSize,
+            offset: currentPage * pageSize,
+        });
+        if (eventType) params.set('event_type', eventType);
+        if (component) params.set('component', component);
+        if (apiKey) params.set('api_key', apiKey);
+
+        const res = await fetch(`/dashboard/audit/logs?${params}`);
+        const data = await res.json();
+        const tbody = document.getElementById('audit-table-body');
+
+        if (!data.logs || data.logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No events found</td></tr>';
+            document.getElementById('pagination-info').textContent = 'No results';
+            return;
+        }
+
+        tbody.innerHTML = data.logs.map(log => `
+            <tr>
+                <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">${new Date(log.created_at).toLocaleString()}</td>
+                <td class="px-6 py-4">${eventBadge(log.event_type)}</td>
+                <td class="px-6 py-4 text-sm font-mono text-slate-600 dark:text-slate-300">${log.component}</td>
+                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">${log.reason || '—'}</td>
+                <td class="px-6 py-4 text-sm font-mono text-slate-500 dark:text-slate-400">${(log.api_key || '').substring(0, 32)}${(log.api_key || '').length > 32 ? '...' : ''}</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('pagination-info').textContent =
+            `Showing ${data.logs.length} of ${data.logs.length} events (page ${currentPage + 1})`;
+    }
+
+    function changePage(delta) {
+        currentPage = Math.max(0, currentPage + delta);
+        loadAudit();
+    }
+
+    loadAudit();
+</script>
+{% endblock %}

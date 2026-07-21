@@ -16,13 +16,15 @@ from typing import Dict, List, Optional
 import httpx
 import yaml
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 # Ensure central-service is importable (works both in Docker and local dev)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audit_db import AuditDB, AuditEvent, SettingsChange, ProvenanceEvent
 from partition_manager import PartitionManager
+from ui import setup_template_serving
+from shared.schemas import BYOCRuleCreate, SettingsOverrideChange
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -112,6 +114,9 @@ async def lifespan(app: FastAPI):
     )
     await partition_manager.connect()
     logger.info("PartitionManager started.")
+
+    # Phase 3.1: Set up dashboard template serving
+    setup_template_serving(app)
 
     # Schedule periodic lifecycle run (every 6 hours)
     app.state.partition_cycle_task = asyncio.create_task(_partition_cycle_loop(partition_manager))
@@ -277,6 +282,132 @@ async def admin_partition_manage():
         )
     stats = await partition_manager.run_full_cycle()
     return JSONResponse(content={"status": "completed", "stats": stats})
+
+
+# ------------------------------------------------------------------ #
+# Phase 3.1 — Dashboard endpoints
+# ------------------------------------------------------------------ #
+
+@app.get("/dashboard/hitl/pending")
+async def dashboard_hitl_pending():
+    """List all pending HITL requests with full context."""
+    pending = await audit_db.get_pending_hitl_requests()
+    return JSONResponse(content={"pending_requests": pending})
+
+
+@app.post("/dashboard/hitl/approve/{request_id}")
+async def dashboard_hitl_approve(request_id: str, approver_id: str = "system"):
+    """Approve a HITL request. Records decision in DB."""
+    try:
+        row_id = await audit_db.record_hitl_decision(request_id, "approved", approver_id)
+        return JSONResponse(content={"status": "approved", "id": row_id})
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=404)
+
+
+@app.post("/dashboard/hitl/deny/{request_id}")
+async def dashboard_hitl_deny(request_id: str, approver_id: str = "system"):
+    """Deny a HITL request. Records decision in DB."""
+    try:
+        row_id = await audit_db.record_hitl_decision(request_id, "denied", approver_id)
+        return JSONResponse(content={"status": "denied", "id": row_id})
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=404)
+
+
+@app.get("/dashboard/byoc/rules")
+async def dashboard_byoc_rules(active_only: bool = True):
+    """List BYOC rules from cloud store."""
+    rules = await audit_db.list_byoc_rules(active_only=active_only)
+    return JSONResponse(content={"rules": rules})
+
+
+@app.post("/dashboard/byoc/rules")
+async def dashboard_byoc_create(rule: BYOCRuleCreate):
+    """Add or update a BYOC rule."""
+    try:
+        rule_id = await audit_db.upsert_byoc_rule(
+            name=rule.name,
+            pattern=rule.pattern,
+            enforcement=rule.enforcement,
+            severity=rule.severity,
+            description=rule.description,
+            rate_limit=rule.rate_limit,
+            window_seconds=rule.window_seconds,
+        )
+        return JSONResponse(content={"status": "updated", "id": rule_id})
+    except Exception:
+        logger.exception("Failed to upsert BYOC rule")
+        return JSONResponse(content={"error": "Internal database error"}, status_code=500)
+
+
+@app.delete("/dashboard/byoc/rules/{name}")
+async def dashboard_byoc_delete(name: str):
+    """Soft-delete a BYOC rule."""
+    deleted = await audit_db.delete_byoc_rule(name)
+    if deleted:
+        return JSONResponse(content={"status": "deleted"})
+    return JSONResponse(content={"error": "Rule not found"}, status_code=404)
+
+
+@app.get("/dashboard/settings")
+async def dashboard_settings(developer_id: str = "default"):
+    """Return merged settings: defaults + per-developer overrides."""
+    defaults = _load_settings_yaml()
+    overrides = await audit_db.get_settings_overrides(developer_id)
+    # Merge: overrides win over defaults
+    merged = {**defaults, **overrides}
+    return JSONResponse(content=merged)
+
+
+@app.post("/dashboard/settings/override")
+async def dashboard_settings_override(change: SettingsOverrideChange):
+    """Set or update a per-developer settings override."""
+    try:
+        row_id = await audit_db.apply_setting_override(
+            developer_id=change.developer_id,
+            key=change.setting_key,
+            value=change.setting_value,
+            changed_by="system",
+        )
+        return JSONResponse(content={"status": "updated", "id": row_id})
+    except Exception:
+        logger.exception("Failed to apply settings override")
+        return JSONResponse(content={"error": "Internal database error"}, status_code=500)
+
+
+@app.get("/dashboard/settings/audit")
+async def dashboard_settings_audit(developer_id: str = "default", limit: int = 100):
+    """Get settings change history for a developer."""
+    audit = await audit_db.get_settings_audit(developer_id, limit)
+    return JSONResponse(content={"audit": audit})
+
+
+@app.get("/dashboard/audit/logs")
+async def dashboard_audit_logs(
+    limit: int = 50,
+    offset: int = 0,
+    event_type: Optional[str] = None,
+    component: Optional[str] = None,
+    api_key: Optional[str] = None,
+):
+    """Paginated audit log browser."""
+    logs = await audit_db.get_audit_logs(
+        limit=limit, offset=offset,
+        event_type=event_type, component=component, api_key=api_key,
+    )
+    return JSONResponse(content={
+        "logs": logs,
+        "limit": limit,
+        "offset": offset,
+    })
+
+
+@app.get("/dashboard/gateways")
+async def dashboard_gateways():
+    """List all registered gateways with liveness status."""
+    gateways = await audit_db.get_online_gateways()
+    return JSONResponse(content={"gateways": gateways})
 
 
 if __name__ == "__main__":

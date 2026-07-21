@@ -10,14 +10,16 @@
 
 ## 🗺️ Phase 3 Overview
 
+**Status:** 3.1 Complete (2026-07-21), 3.2–3.4 Pending
+
 Phase 3 closes the gap between the **infrastructure** (Phase 2) and the **operational control plane**. After Phase 2, every LLM request is vetted and every event is logged — but there is no UI for humans to approve actions, no web interface to manage rules, and no mechanism to push settings changes to gateways.
 
 Phase 3 delivers:
 
-1. **A lightweight web dashboard** for HITL approvals, rule management, and audit browsing
-2. **Cloud-persisted HITL approvals** — decisions survive server restarts
-3. **Dynamic BYOC rule updates** — new rules without code deploy
-4. **Centralized config sync** — backend pushes settings to local gateways
+1. ✅ **A lightweight web dashboard** for HITL approvals, rule management, and audit browsing — **completed in Phase 3.1**
+2. ⏳ **Cloud-persisted HITL approvals** — decisions survive server restarts — **Phase 3.3**
+3. ⏳ **Dynamic BYOC rule updates** — new rules without code deploy — **Phase 3.2**
+4. ⏳ **Centralized config sync** — backend pushes settings to local gateways — **Phase 3.4**
 
 ### High-Level Architecture for Phase 3
 

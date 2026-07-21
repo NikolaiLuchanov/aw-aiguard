@@ -98,12 +98,14 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 *Goal: Implement the human approval interface and the final "Hard Boundary" enforcement layer.*
 
 - [x] **3.1 Centralized Admin Dashboard (Web UI)**
-    - ✅ Detailed plan in `IMPLEMENTATION_PLAN_PHASE_3_1.md` — 7 HTML templates, 11 API endpoints, 5 DB tables, 56 tests.
+    - ✅ Completed (commit `b3ed7a5`, 2026-07-21). 21 files, 329 total tests passing.
+    - 7 HTML templates, 11 API endpoints, 5 DB tables, 56 new tests.
     - **Approval Queue:** View pending HITL requests with provenance → Click "Approve" or "Deny".
     - **BYOC Management:** CRUD rules via web UI.
     - **Settings:** View/apply per-developer overrides.
     - **Audit Browser:** Paginated, filterable log viewer.
     - **Gateway Status:** Liveness monitoring dashboard.
+    - Route collision resolution: template routes under `/ui/*`, API routes at `/dashboard/*`.
 - [x] **3.2 BYOC Stop-Limits Engine**
     - *(Partially done in Phase 1.6 gap fix — basic enforcement with `hard_stop` and `soft_block` levels is active.)*
     - Extend with: dynamic rule updates via admin dashboard, per-API-key rule overrides, rule versioning/audit trail.

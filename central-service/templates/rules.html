@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}BYOC Rule Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">BYOC Rule Management</h1>
+        <button onclick="toggleRuleForm()" class="px-4 py-2 bg-accent text-white rounded-md text-sm hover:bg-blue-600">
+            + Add Rule
+        </button>
+    </div>
+
+    <!-- Add Rule Form (hidden by default) -->
+    <div id="rule-form" class="hidden bg-white dark:bg-slate-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-700 space-y-4">
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100">New BYOC Rule</h2>
+        <form onsubmit="submitRule(event)" class="space-y-3">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Rule Name</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" placeholder="e.g., never_exfiltrate">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Enforcement</label>
+                    <select name="enforcement" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                        <option value="hard_stop">Hard Stop</option>
+                        <option value="soft_block">Soft Block</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                <input type="text" name="description" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" placeholder="Brief description of this rule">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Regex Pattern</label>
+                <textarea name="pattern" rows="3" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-mono bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" placeholder="e.g., AKIA[0-9A-Z]{16}|ghp_[0-9A-Za-z]{36}"></textarea>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Severity</label>
+                    <select name="severity" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                        <option value="critical">Critical</option>
+                        <option value="high" selected>High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Rate Limit</label>
+                    <input type="number" name="rate_limit" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" placeholder="Optional">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Window (sec)</label>
+                    <input type="number" name="window_seconds" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" placeholder="Optional">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="toggleRuleForm()" class="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-accent text-white rounded-md text-sm hover:bg-blue-600">Save Rule</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Rules Table -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-750">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Description</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Enforcement</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Severity</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Version</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="rules-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                <tr><td colspan="6" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">Loading rules...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function loadRules() {
+        const res = await fetch('/dashboard/byoc/rules');
+        const data = await res.json();
+        const tbody = document.getElementById('rules-table-body');
+
+        if (!data.rules || data.rules.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400">No rules configured</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.rules.map(rule => {
+            const enforcementClass = rule.enforcement === 'hard_stop'
+                ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
+            const severityClass = {
+                critical: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                high: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+                medium: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+                low: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+            }[rule.severity] || 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200';
+
+            return `
+            <tr>
+                <td class="px-6 py-4 text-sm font-mono">${rule.name}</td>
+                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">${rule.description || '—'}</td>
+                <td class="px-6 py-4"><span class="px-2 py-1 text-xs rounded-full ${enforcementClass}">${rule.enforcement}</span></td>
+                <td class="px-6 py-4"><span class="px-2 py-1 text-xs rounded-full ${severityClass}">${rule.severity}</span></td>
+                <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">v${rule.version}</td>
+                <td class="px-6 py-4 text-sm">
+                    <button hx-post="/dashboard/byoc/rules/${rule.name}"
+                            hx-headers='{"Content-Type": "application/json"}'
+                            hx-encoding="application/json"
+                            hx-vals='{\"name\":\"${rule.name}\",\"enforcement\":\"${rule.enforcement}\",\"severity\":\"${rule.severity}\",\"pattern\":\"${rule.pattern}\",\"description\":\"${rule.description || ''}\",\"is_active\":\"${!rule.is_active}\"}'
+                            hx-swap="none" hx-on::after-request="loadRules()"
+                            class="px-3 py-1 text-sm bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600 mr-2">
+                        ${rule.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button hx-delete="/dashboard/byoc/rules/${rule.name}"
+                            hx-swap="none" hx-on::after-request="loadRules()"
+                            class="px-3 py-1 text-sm bg-danger text-white rounded hover:bg-red-600">
+                        Delete
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function toggleRuleForm() {
+        const form = document.getElementById('rule-form');
+        form.classList.toggle('hidden');
+    }
+
+    async function submitRule(event) {
+        event.preventDefault();
+        const form = event.target;
+        const data = Object.fromEntries(new FormData(form).entries());
+
+        // Convert empty strings to null for optional fields
+        if (data.rate_limit === '') data.rate_limit = null;
+        if (data.window_seconds === '') data.window_seconds = null;
+
+        const res = await fetch('/dashboard/byoc/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+
+        if (res.ok) {
+            form.reset();
+            toggleRuleForm();
+            loadRules();
+        }
+    }
+
+    loadRules();
+</script>
+{% endblock %}
