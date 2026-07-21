@@ -625,10 +625,94 @@ Phase 3.2 is complete when:
 8. ✅ 15 new unit tests + 4 integration tests all passing
 9. ✅ All 300+ existing Phase 1–3.1 tests still passing (no regression)
 10. ✅ `gateway/.env` updated with `BYOC_CLOUD_URL` and `BYOC_SYNC_INTERVAL` defaults
+11. ✅ **Documentation updated:** README (gateway), architecture-design.md, IMPLEMENTATION_PLAN.md, IMPLEMENTATION_PLAN_PHASE_3.md (see Section 10)
 
 ---
 
-## 10. Risks & Mitigations
+## 10. Documentation Updates
+
+### 10.1 `gateway/README.md`
+
+**Current state:** Documents `TARGET_API_BASE_URL`, `TARGET_API_KEY`, `GUARDIAN_URL`, `SCAN_SEQUENCE`, `HITL_DEFAULT_TIMEOUT`, `BYOC_RULES_PATH` — but not the cloud sync variables.
+
+**Changes needed:**
+
+1. Add two new env var entries to the Configuration table:
+
+| Variable | Default | Description |
+|---|---|---|
+| `BYOC_CLOUD_URL` | `""` (empty) | Central Service URL for cloud BYOC rule sync. Empty = local YAML only. |
+| `BYOC_SYNC_INTERVAL` | `120` | Seconds between periodic cloud BYOC rule re-syncs. Set to `0` for one-shot startup only. |
+
+2. Add a new section under "Runtime Behavior" titled **"Cloud Rule Sync"**:
+   - Explain the dual-source model: local YAML + cloud PostgreSQL
+   - Document the merge precedence (cloud replaces local by name)
+   - Note that sync is background-only and non-fatal
+   - Reference the `GET /byoc/rules` endpoint
+
+3. Add `GET /byoc/rules` to the "Gateway API Endpoints" table:
+   - Method: `GET`
+   - Path: `/byoc/rules`
+   - Description: "List active BYOC rules with source attribution (local/cloud), version, and count."
+
+### 9.1.2 `architecture-design.md`
+
+**Current state:** Section 6C (BYOC Rule Layer) describes the engine loading from YAML. Section 3 (Proxy Gateways) describes the pipeline flow. No mention of cloud-sourced rules.
+
+**Changes needed:**
+
+1. **Section 6C (BYOC Rule Layer):** Update from:
+   > `gateway/core/byoc.py` — loads structured rules from `byoc_rules.yaml`.
+
+   To:
+   > `gateway/core/byoc.py` — dual-source rule engine. Loads base rules from `byoc_rules.yaml` on startup, then merges with cloud rules from PostgreSQL `byoc_rules` table (fetched via `GET /dashboard/byoc/rules` every `BYOC_SYNC_INTERVAL` seconds). Per-developer overrides from `settings_override` table can soft-disable individual rules. Merge precedence: cloud replaces local by name; overrides remove.
+
+2. **Section 10.c (Runtime Architecture):** Add a new bullet under "Local Gateway":
+   > - **Dynamic BYOC rules (Phase 3.2):** Gateway polls Central Service for rule updates, merges cloud rules with local YAML, applies per-developer overrides. No restart required for rule changes.
+
+3. **Section 11 (Phase 1 Implementation Roadmap):** Update the Phase 3 task table:
+   - Mark task `3.2` as "In Progress" (was "Planned")
+   - Update description from "Basic enforcement" to "Cloud-stored rules, dynamic reload, per-key overrides"
+
+### 9.1.3 `IMPLEMENTATION_PLAN.md`
+
+**Current state:** Phase 3 table shows 3.2 as "Partially done (Phase 1.6 gap fix — basic enforcement with hard_stop and soft_block levels is active)."
+
+**Changes needed:**
+
+1. Update Phase 3 task table entry for 3.2:
+   - Status: change "Partially done" → "Phase 3.2 complete" (after implementation)
+   - Description: add "Cloud-stored rules via PostgreSQL, dynamic reload, per-developer overrides"
+
+2. Update the "Complete State" summary paragraph to mention cloud-sourced BYOC rules.
+
+3. Update the "Layer-by-Layer Test Coverage" table to reflect the new `test_byoc_cloud.py` and `test_byoc_sync.py` files.
+
+4. Update the total test count: from "~300" to "~315" (15 new unit tests).
+
+### 9.1.4 `IMPLEMENTATION_PLAN_PHASE_3.md`
+
+**Current state:** Task 3.2 checklist item shows "P1" priority, status "⬜".
+
+**Changes needed:**
+
+1. Update the task checklist table for row **3.2**:
+   - Description: change from "BYOC Stop-Limits Engine" → "BYOC Cloud Extension (3.2)"
+   - Add sub-items: "Cloud rule sync", "Dynamic reload", "Per-key overrides", "Gateway rules endpoint"
+   - Status: change "⬜" → "✅" (after implementation)
+
+2. Update the "Phase 3 Overview" text:
+   > ⏳ Dynamic BYOC rule updates — new rules without code deploy — **Phase 3.2**
+   to:
+   > ✅ Dynamic BYOC rule updates — cloud-sourced rules, dynamic reload, per-key overrides — **Phase 3.2 (completed)**
+
+3. Update the "New Files Summary" section to include the two new test files.
+
+4. Update the "Definition of Done" section — add the documentation update checklist item (already done in this plan's DoD).
+
+---
+
+## 11. Risks & Mitigations
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
