@@ -78,7 +78,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Channel config read from `guardrail-config/settings.yaml` (`alert_channels` key). Per-channel credentials from `.env`.
     - Integrated into `api_server.py`: both `POST /audit/log` and `POST /audit/batch` trigger alerts.
     - **Verified:** 19/19 tests passed in `verify_phase_2_3.py` (15 unit + 4 E2E).
-|- [ ] **2.4 Cloud DB Schema Lifecycle Management**
+|- [x] **2.4 Cloud DB Schema Lifecycle Management**
     - *See IMPLEMENTATION_PLAN_PHASE_2_4.md for full spec.*
     - Implement `PartitionManager`: archive old partitions (30-day TTL) to MinIO (JSONL.gz), drop from Postgres.
     - Auto-create future monthly partitions (N+1 through N+3), idempotent.
@@ -109,10 +109,12 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 - [x] **3.2 BYOC Stop-Limits Engine**
     - ✅ Phase 3.1: Dashboard CRUD endpoints, cloud DB table, Pydantic models
     - ✅ Phase 3.2: Cloud-stored rules with dynamic reload, per-API-key overrides, background sync loop, source attribution
-- [ ] **3.3 Approval Execution Flow**
-    - *(Local version done in Phase 1.6 gap fix — `POST /hitl/resume/{request_id}` handles the full flow.)*
-    - Extend with cloud persistence: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request` via the Central Service.
-| [x] **3.4 Centralized Config Sync** ✅
+|- [x] **3.3 Approval Execution Flow** ✅
+    - ✅ Cloud persistence: HITL approval synced to Central Service, recovery from cloud on proxy startup
+    - ✅ 4 cloud endpoints (POST /hitl/approve, GET /hitl/decision, GET /hitl/recover/<id>, GET /hitl/recover/pending)
+    - ✅ Periodic cleanup loop, prompt_hash + provenance injection, dashboard state display
+    - 35 new tests across 4 files
+|- [x] **3.4 Centralized Config Sync** ✅
     - ✅ Backend-to-local sync for all settings (Guardian, scanner, HITL)
     - ✅ Gateway heartbeat registration (30s interval)
     - ✅ Gateway settings poll loop (60s interval)
