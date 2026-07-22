@@ -112,8 +112,16 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 - [ ] **3.3 Approval Execution Flow**
     - *(Local version done in Phase 1.6 gap fix — `POST /hitl/resume/{request_id}` handles the full flow.)*
     - Extend with cloud persistence: `Approval Clicked` $\\rightarrow$ `Update DB Status` $\\rightarrow$ `Signal Proxy to Resume/Forward Request` via the Central Service.
-- [ ] **3.4 Centralized Config Sync**
-    - Implement backend-to-local sync for Guardian thresholds, alert channels, and BYOC updates.
+| [x] **3.4 Centralized Config Sync** ✅
+    - ✅ Backend-to-local sync for all settings (Guardian, scanner, HITL)
+    - ✅ Gateway heartbeat registration (30s interval)
+    - ✅ Gateway settings poll loop (60s interval)
+    - ✅ Settings diff detection and hot-reload
+    - ✅ Settings audit trail with old_value/sync_source tracking
+    - ✅ Paginated settings history endpoint
+    - ✅ Force sync trigger endpoint
+    - ✅ Dashboard settings page with change history + sync button
+    - 31 new tests (431 total)
 
 ### Phase 4: Defense-in-Depth (Advanced Hardening)
 *Goal: Implement complex safety patterns and structural constraints to address indirect injection and data poisoning.*

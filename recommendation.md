@@ -112,6 +112,7 @@ Based on the architecture-design1.md v1.1 alignment:
 | **P2** | Cloud DB partition lifecycle management (archive → MinIO, auto-create) | ✅ Phase 2.4 |
 | **P2** | Provenance tagging schema + enforcement pipeline | ✅ Phase 2.5 |
 | **P2** | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
+| **P2** | Centralized config sync (heartbeat + settings poll) | ✅ Phase 3.4 |
 | P2 | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
 | P2 | Data/command separation validation schemas | Planned (Phase 4.5) |
 

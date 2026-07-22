@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audit_db import AuditDB, AuditEvent, SettingsChange, ProvenanceEvent
 from partition_manager import PartitionManager
 from ui import setup_template_serving
-from shared.schemas import BYOCRuleCreate, SettingsOverrideChange, HitlCreateRequest
+from shared.schemas import BYOCRuleCreate, SettingsOverrideChange, HitlCreateRequest, GatewayHeartbeat
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -364,16 +364,66 @@ async def dashboard_settings(developer_id: str = "default"):
 async def dashboard_settings_override(change: SettingsOverrideChange):
     """Set or update a per-developer settings override."""
     try:
+        # Get the old value for audit trail
+        current_settings = await audit_db.get_settings_overrides(change.developer_id)
+        old_value = current_settings.get(change.setting_key)
+
         row_id = await audit_db.apply_setting_override(
             developer_id=change.developer_id,
             key=change.setting_key,
             value=change.setting_value,
             changed_by="system",
+            sync_source="backend",
+            old_value=old_value,
         )
         return JSONResponse(content={"status": "updated", "id": row_id})
     except Exception:
         logger.exception("Failed to apply settings override")
-        return JSONResponse(content={"error": "Internal database error"}, status_code=500)
+        return JSONResponse(
+            content={"error": "Internal database error"},
+            status_code=500,
+        )
+
+
+@app.get("/dashboard/settings/history")
+async def dashboard_settings_history(
+    developer_id: str = "default",
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Get paginated settings change history for a developer."""
+    audit = await audit_db.get_settings_audit(developer_id, limit=limit + offset)
+    audit = audit[offset:offset + limit]
+    return JSONResponse(content={
+        "audit": audit,
+        "limit": limit,
+        "offset": offset,
+    })
+
+
+@app.post("/dashboard/settings/sync-now")
+async def dashboard_settings_sync_now(developer_id: str = "default"):
+    """
+    Trigger immediate settings sync for a specific gateway.
+    The gateway will pick it up on its next poll cycle.
+    For now, it logs that the developer should expect the next poll.
+    """
+    # Record the sync trigger in the audit log for traceability
+    try:
+        await audit_db.record_settings_change(
+            developer_id=developer_id,
+            key="_sync_status",
+            old_value="synced",
+            new_value="sync_triggered",
+            sync_source="backend",
+            changed_by="admin",
+        )
+    except Exception:
+        pass  # Best-effort audit logging
+    return JSONResponse(content={
+        "status": "queued",
+        "message": f"Settings sync will be applied on gateway's next poll cycle.",
+    })
 
 
 @app.get("/dashboard/settings/audit")
@@ -401,6 +451,29 @@ async def dashboard_audit_logs(
         "limit": limit,
         "offset": offset,
     })
+
+
+@app.post("/dashboard/heartbeat")
+async def dashboard_heartbeat(heartbeat: GatewayHeartbeat):
+    """
+    Register gateway liveness. Called every 30 seconds by each gateway.
+    Upserts the gateway_status row and marks is_online = TRUE.
+    """
+    try:
+        row_id = await audit_db.record_gateway_heartbeat(
+            gateway_id=heartbeat.gateway_id,
+            api_key_hash=heartbeat.api_key_hash,
+            version=heartbeat.version,
+            settings_hash=heartbeat.settings_hash,
+            ip_address=heartbeat.ip_address,
+        )
+        return JSONResponse(content={"status": "ok", "id": row_id})
+    except Exception:
+        logger.exception("Failed to record gateway heartbeat")
+        return JSONResponse(
+            content={"error": "Internal database error"},
+            status_code=500,
+        )
 
 
 @app.get("/dashboard/gateways")

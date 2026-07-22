@@ -363,11 +363,18 @@ class AuditDB:
             """, developer_id)
             return {r["setting_key"]: r["setting_value"] for r in rows}
 
-    async def apply_setting_override(self, developer_id: str, key: str,
-                                     value: str, changed_by: str = "system") -> int:
+    async def apply_setting_override(
+        self,
+        developer_id: str,
+        key: str,
+        value: str,
+        changed_by: str = "system",
+        sync_source: str = "backend",
+        old_value: Optional[str] = None,
+    ) -> int:
         """
         Apply a settings override. Uses INSERT ... ON CONFLICT UPDATE.
-        Also logs to settings_audit_log.
+        Also logs to settings_audit_log with full audit context.
         Returns the new row id.
         """
         async with self.pool.acquire() as conn:
@@ -383,11 +390,12 @@ class AuditDB:
                     RETURNING id
                 """, developer_id, key, value, changed_by)
 
-                # Log to settings_audit_log
+                # Log to settings_audit_log with full context
                 await conn.execute("""
-                    INSERT INTO settings_audit_log (developer_id, setting_key, new_value, sync_source, changed_by)
-                    VALUES ($1, $2, $3, 'backend', $4)
-                """, developer_id, key, value, changed_by)
+                    INSERT INTO settings_audit_log
+                        (developer_id, setting_key, old_value, new_value, sync_source, changed_by)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """, developer_id, key, old_value, value, sync_source, changed_by)
 
                 return row["id"]
 
