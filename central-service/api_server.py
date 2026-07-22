@@ -70,8 +70,12 @@ def _get_severity(event: AuditEvent) -> str:
             return "CRITICAL"
         if event.component == "pii_scanner":
             return "HIGH"
+        if event.component == "function_call_detector":
+            return "CRITICAL"
         return "HIGH"
     if event.event_type == "warn":
+        if event.component == "function_call_detector":
+            return "WARNING"
         return "WARNING"
     if event.event_type == "pause":
         return "NOTICE"

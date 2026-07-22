@@ -128,7 +128,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 ### Phase 4: Defense-in-Depth (Advanced Hardening)
 *Goal: Implement complex safety patterns and structural constraints to address indirect injection and data poisoning.*
 
-- [ ] **4.1 Function-Calling Hallucination Detection**
+|- [x] **4.1 Function-Calling Hallucination Detection**
     - Add a pre-execution Guardian pass to evaluate whether model-proposed tool calls are legitimate or injected fabrications.
     - Works alongside structured schema validation — schema checks structure, Guardian checks semantics.
 - [ ] **4.2 Stored Injection Countermeasures**

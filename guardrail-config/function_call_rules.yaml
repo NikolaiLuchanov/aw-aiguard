@@ -1,0 +1,33 @@
+# Function-Calling Hallucination Detection Rules (Phase 4.1)
+#
+# This layer checks whether LLM-proposed tool calls are legitimate
+# or injected fabrications. Uses Granite Guardian's function-hallucination
+# detection (0.79 BAcc on OOD safety).
+#
+# Runs only when: (1) response contains tool calls AND (2) low-trust provenance
+# (trust_level < 0.5) OR the tool is in tool_overrides.enforce=true.
+
+# Trust-level threshold for enabling the detector
+low_trust_threshold: 0.5
+
+# Fail-safe strategy when Guardian API is unreachable
+# Options: block (default, production-safe), allow, warn, fallback
+fail_strategy: "block"
+
+# Timeout for Guardian function-hallucination check (seconds)
+timeout_seconds: 5
+
+# Tool-level overrides: per-tool configuration
+# enforce: true means always check, regardless of trust level
+tool_overrides:
+  terminal:
+    enforce: true          # Always check — most dangerous if hallucinated
+  browser_navigate:
+    enforce: true          # Always check — network access
+  delegate_task:
+    enforce: false         # Skip for delegated tasks (reduces false positives)
+  web_search:
+    enforce: false
+
+# Minimum tool call confidence (sent to Guardian as context)
+min_confidence: 0.3

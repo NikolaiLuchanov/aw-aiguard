@@ -3,7 +3,7 @@ import logging
 import json
 import asyncio
 import hashlib
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Dict, List, Optional
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 
@@ -14,6 +14,7 @@ from gateway.core.block import generate_block_response, BlockReason
 from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 from gateway.core.audit import AuditLogger
 from gateway.core.provenance import Provenance
+from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,7 @@ class LLMProxy:
         scanner: Optional[PIIScanner] = None,
         hitl: Optional[HITLGate] = None,
         byoc: Optional[BYOCEngine] = None,
+        detector: Optional[FunctionCallDetector] = None,  # Phase 4.1
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -42,6 +44,7 @@ class LLMProxy:
         self.scanner = scanner
         self.hitl = hitl
         self.byoc = byoc
+        self.detector = detector
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -101,7 +104,8 @@ class LLMProxy:
         blocked_by_name = None
         hitl_request_id = None
         
-        # Extract prompt for security checks
+        # Extract prompt and body for security checks
+        body: Optional[Dict] = None
         prompt = ""
         if content:
             try:
@@ -275,7 +279,32 @@ class LLMProxy:
                             blocked_by="guardian",
                         )
 
-        # Layer 3: BYOC Stop-Limits (final authority — after PII + Guardian)
+        # --- Phase 4.1: Function-Calling Hallucination Detection ---
+        # Only runs when: (1) response contains tool calls AND (2) low-trust provenance
+        if self.detector:
+            tool_calls = self._extract_tool_calls(body)
+            if tool_calls:
+                fc_result = await self.detector.check(tool_calls, provenance)
+                if fc_result.decision == SafetyDecision.BLOCK:
+                    component_name = "function_call_detector"
+                    await self.audit_logger.log_event(
+                        self.api_key, "block", component_name, prompt,
+                        reason=fc_result.message, blocked_by="function_call_detector",
+                        prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                    ) if self.audit_logger else None
+                    return generate_block_response(
+                        reason=BlockReason.FUNCTION_CALL_HALLUCINATION,
+                        message=fc_result.message,
+                        blocked_by="function_call_detector",
+                    )
+                elif fc_result.decision == SafetyDecision.WARNING:
+                    await self.audit_logger.log_event(
+                        self.api_key, "warn", "function_call_detector", prompt,
+                        reason=fc_result.message,
+                        prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                    ) if self.audit_logger else None
+
+        # Layer 3: BYOC Stop-Limits (final authority — after PII + Guardian + Function-Call Check)
         byoc_result: Optional[BYOCCheckResult] = None
         if prompt and self.byoc:
             byoc_result = self.byoc.check(prompt, self.api_key)
@@ -377,6 +406,50 @@ class LLMProxy:
             return Response(content="Internal Server Error", status_code=500)
 
 
+
+    def _extract_tool_calls(self, body: Optional[Dict]) -> Optional[List[dict]]:
+        """
+        Extract tool calls from an LLM API request/response body.
+
+        Handles Anthropic-style (tool_use blocks) and OpenAI-style (tool_calls) formats.
+
+        Returns:
+            List of {"name": str, "arguments": str} dicts, or None if no tool calls found.
+        """
+        if not body or not isinstance(body, dict):
+            return None
+
+        messages = body.get("messages", [])
+        if not isinstance(messages, list):
+            return None
+
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+
+            # OpenAI-style: messages with "tool_calls" array
+            if "tool_calls" in msg and isinstance(msg["tool_calls"], list):
+                tool_calls = []
+                for tc in msg["tool_calls"]:
+                    if isinstance(tc, dict):
+                        name = tc.get("function", {}).get("name") or tc.get("name", "")
+                        args = tc.get("function", {}).get("arguments", "") or tc.get("arguments", "")
+                        if name and args:
+                            tool_calls.append({"name": name, "arguments": args})
+                if tool_calls:
+                    return tool_calls
+
+            # Anthropic-style: content blocks with "tool_use" type
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        name = block.get("name", "")
+                        input_str = json.dumps(block.get("input", {}))
+                        if name and input_str:
+                            return [{"name": name, "arguments": input_str}]
+
+        return None
 
     def _update_body_prompt(self, old_content: bytes, new_prompt: str) -> bytes:
         try:

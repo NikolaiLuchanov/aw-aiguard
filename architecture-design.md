@@ -156,21 +156,41 @@ This allows the same `scan_rules.yaml` to behave as a strict blocker in producti
 **Goal:** *Block malicious or harmful intent before execution.*  
 Every single payload hits the guardrail *before* the tool is invoked. The proxy sends the prompt to the **cloud Guardian server**, which scores it. If `granite4.1-guardian` returns `no`, execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
 
-### Layer 3: BYOC Stop-Limits (Final Authority)
+### Layer 3: Function-Calling Hallucination Detection (Phase 4.1 ✅)
+**Goal:** *Detect fabricated tool calls that look structurally valid but are semantically injected.*
+
+Granite Guardian 8B reports **0.79 BAcc on function-calling hallucination detection**. When the LLM proposes tool calls — especially with low-trust provenance data in context — the model may fabricate parameters or invent tool calls entirely. This layer catches fabricated tool calls that pass the general Guardian safety check (Layer 2) but are injected or hallucinated.
+
+**When it runs:**
+- The LLM response contains tool invocations (extracted from `tool_calls` or `tool_use` blocks)
+- AND provenance trust level < 0.5 (configurable via `low_trust_threshold`)
+- OR the tool is in the `tool_overrides.enforce: true` list (e.g., `terminal`, `browser_navigate`)
+
+**Implementation:** `gateway/core/function_call_detector.py` — `FunctionCallDetector` class. Reuses `GuardianGuard` with a `check_type: function_hallucination` payload. Guardian returns `yes` (legitimate) or `no` (hallucination detected).
+
+**Fail-safe behavior:** Configurable via `function_call_rules.yaml` (`fail_strategy`). Default is `block` (fail-closed). Four strategies: `block`, `allow`, `warn`, `fallback`.
+
+**Configuration:** `guardrail-config/function_call_rules.yaml`
+
+**Pipeline position:** Between Guardian fast-mode (L2) and BYOC (L3). If the detector blocks, BYOC never runs — the tool call is already invalid.
+
+**Block response:** Returns `403` with `reason: "FUNCTION_CALL_HALLUCINATION"`, `blocked_by: "function_call_detector"`. Alert fires at `CRITICAL` severity.
+
+### Layer 4: BYOC Stop-Limits (Final Authority)
 
 **Goal:** *Codify explicit "never do this" rules that override any other safety check, including Guardian scores.*
 
 A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no model decision can bypass:
 
-**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
+**Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 4 in the proxy pipeline (after PII → Guardian → Function-Call Detector).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
 - `soft_block`: Log warning + alert, request continues (e.g. `max_tool_calls_per_minute`)
 
-### Layer 4: Human-in-the-Loop (HITL) Gate
+### Layer 5: Human-in-the-Loop (HITL) Gate
 
 **Goal:** *Require explicit human approval before any irreversible or outbound action executes.*
 
@@ -182,7 +202,11 @@ A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no mod
 
 **Security rationale:** The most critical safety gap in any LLM security architecture. Prompt injection and hallucination can cause fully autonomous agents to execute destructive commands without detection. HITL ensures no irreversible action occurs without human oversight, regardless of Guardian scores or other safeguards.
 
-### Layer 5: Post-Processing Thinking-Mode Verification (New in v1.1)
+**Provenance integration:** Each HITL approval request carries a `provenance_tag` in its payload (see Section 5) so the approver knows exactly which data source and trust level the request is operating on.
+
+**Implementation state:** Implemented in Phase 1.5/1.6.
+
+### Layer 6: Post-Processing Thinking-Mode Verification (New in v1.1)
 
 **Goal:** *Re-evaluate the final LLM output against BYOC rules using deep reasoning.* 
 
@@ -191,7 +215,7 @@ After the main LLM generates a full response and passes the pre-flight guardrail
 - **Thinking mode advantage:** The Guardian model can reason about context, identify subtle injection patterns that evade fast detection, and validate against custom rules specific to your use case. This is the recommended approach for BYOC evaluation where generic safety models are insufficient.
 - **Performance trade-off:** Think mode adds ~2–5x latency vs non-thinking mode (fast). Only apply to high-sensitivity outputs or irreversible tool calls. For standard responses, fast mode pre-flight may be sufficient.
 
-### Layer 5B: OWASP LLM05 — Output Control (New in v1.2)
+### Layer 6B: OWASP LLM05 — Output Control (New in v1.2)
 
 **The gap:** Guardian's pre-flight + post-response checks protect against *harmful intent* injected into the model, but they don't prevent the model from producing *correct-but-wrong output* based on poisoned context. A fact-substituted PR recommendation passes both Guardian gates if Guardian was trained purely on violent/harmful content detection.
 
@@ -221,7 +245,7 @@ Every audit log entry and payload MUST include a `provenance` object with the fo
 
 1. **Pre-ingestion tagging:** All data fetched into your RAG pipeline or context window MUST be tagged with provenance at ingestion time — not retroactively.
 2. **Trust-gated operations:** Low-trust content (e.g., `trust_level < 0.5`) triggers additional Guardian checks, tighter BYOC validation, and mandatory HITL gates before any write/deliver operation.
-3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 5), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
+3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 6), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
 4. **Audit log provenance carry-through:** Every downstream transformation carries the original provenance chain forward so root-cause attribution is always possible.
 
 **Never do this (stop-limits applied to provenance):**
@@ -255,7 +279,7 @@ A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-fli
 
 **Implementation:** `gateway/core/byoc.py` — dual-source rule engine (Phase 3.2). Loads base rules from `guardrail-config/byoc_rules.yaml` on startup, then merges with cloud rules from PostgreSQL `byoc_rules` table (fetched via `GET /dashboard/byoc/rules` every `BYOC_SYNC_INTERVAL` seconds). Per-developer overrides from `settings_override` table can soft-disable individual rules (e.g., `byoc_rule_never_exfiltrate_disabled`). Merge precedence: cloud replaces local by name; overrides remove. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 3 in the proxy pipeline (after PII → Guardian).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning and Guardian scoring are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection (Layer 3) are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 5), which sits after BYOC in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
@@ -433,7 +457,7 @@ aw-aiguard/
 | P0 | Core proxy on `localhost:9020` with Guardian pre-flight gate (Section 3.1) | ✅ Done | Foundation for all other features |
 | P0 | HITL middleware for irreversible actions (Section 3.4) | ✅ Done | Pre-MVP requirement |
 | P0 | HITL resume flow + BYOC engine (Phase 1.6 gap fixes) | ✅ Done | Full HITL cycle + stop-limits |
-| P1 | Post-processing thinking-mode verification (Section 4, Layer 5) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
+| P1 | Post-processing thinking-mode verification (Section 4, Layer 6) | Sprint 2 | Apply high-trust outputs fast, low-trust through thinking mode |
 | P2 | Central backend deployment (Phase 2.1) | ✅ Done | PostgreSQL + MinIO + API server (Docker Compose) |
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
 | P2 | Provenance tagging schema + enforcement (Section 5) | ✅ Phase 2.5 | Pairs with audit infrastructure |

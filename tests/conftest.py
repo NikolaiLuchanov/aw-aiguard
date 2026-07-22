@@ -51,6 +51,12 @@ def byoc_rules_path():
 
 
 @pytest.fixture
+def function_call_rules_path():
+    """Path to the real function_call_rules.yaml."""
+    return str(GUARDRAIL_CONFIG / "function_call_rules.yaml")
+
+
+@pytest.fixture
 def settings_yaml_path():
     """Path to the real settings.yaml."""
     return str(GUARDRAIL_CONFIG / "settings.yaml")

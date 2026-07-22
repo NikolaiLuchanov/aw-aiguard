@@ -47,10 +47,11 @@ The proxy implements a full round-trip flow to ensure security at both ends of t
 2. **PII Scan**: (Phase 1.4) Scans for secrets/PII — blocks (403) if `SCAN_ACTION_MODE=block`, or warns and redacts if `SCAN_ACTION_MODE=warn`.
 3. **Pre-Flight**: (Phase 1.3) Checks for safety/injection via the `GuardianGuard` adapter.
 4. **BYOC Stop-Limits**: (Phase 1.6+) Final enforcement layer — applies "never do this" rules after PII and Guardian checks.
-5. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
-6. **Forwarding**: Sends the request to the Cloud LLM provider.
-7. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
-8. **Post-Processing**: *(Roadmap v2.0)* Scans the LLM's response for leaked secrets or dangerous content.
+5. **Function-Call Hallucination Detection**: (Phase 4.1) Checks LLM-proposed tool calls against Guardian in function-hallucination mode — blocks fabricated or injected tool calls on low-trust provenance.
+6. **HITL Check**: (Phase 1.5) Pauses irreversible/high-risk actions for human approval. Stores full request for resume.
+7. **Forwarding**: Sends the request to the Cloud LLM provider.
+8. **Delivery**: Forwards the final response (standard or streamed tokens) back to the Agent.
+9. **Post-Processing**: *(Roadmap v2.0)* Scans the LLM's response for leaked secrets or dangerous content.
 
 ### The `GuardianGuard` Adapter
 The `GuardianGuard` is a robust adapter that mediates between the local proxy and the Cloud Guardian Model Server. It is designed for high reliability and zero-trust.
@@ -111,6 +112,7 @@ Proxy → 200 { actual LLM response }
 ### Architecture
 - **Engine**: `gateway/core/proxy.py` - Handles the `httpx.AsyncClient` lifecycle and header transformations.
 - **Adapter**: `gateway/core/guardrail.py` - The `GuardianGuard` logic for pre-flight safety.
+- **Function-Call Detector**: `gateway/core/function_call_detector.py` - Evaluates tool calls for hallucination via Guardian (Phase 4.1).
 - **Scanner**: `gateway/core/scanner.py` - The PII and Secrets detection engine.
 - **HITL**: `gateway/core/hitl.py` - The Human-in-the-Loop pause middleware with resume support.
 - **BYOC**: `gateway/core/byoc.py` - The "Bring Your Own Criteria" stop-limits enforcement engine.
@@ -164,6 +166,7 @@ When the proxy intercepts and blocks a request, it returns a standardized `403 F
 | `CRITICAL_SECRET_DETECTED` | `pii_scanner` | PII/Secrets scanner |
 | `HITL_DENIED` | `hitl_gate` | Human denied the HITL request |
 | `HITL_EXPIRED` | `hitl_gate` | HITL request timed out |
+| `FUNCTION_CALL_HALLUCINATION` | `function_call_detector` | Guardian flagged tool calls as hallucinated |
 | `POTENTIAL_SAFETY_VIOLATION` | `byoc_engine` | BYOC stop-limit rule violation |
 
 **HITL resume flow:** When a HITL request is approved, the proxy stores the full original HTTP request and re-forwards it to the LLM provider via `POST /hitl/resume/{request_id}` — no client re-submission is needed. If a request is denied or expired, calling `/hitl/resume/{request_id}` returns a `403` with the standardized block error embedded.
