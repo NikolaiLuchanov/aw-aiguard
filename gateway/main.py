@@ -45,6 +45,13 @@ BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-confi
 BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "")  # e.g. "http://localhost:8000"
 BYOC_SYNC_INTERVAL = int(os.getenv("BYOC_SYNC_INTERVAL", "120"))  # seconds
 
+# HITL Cloud Sync (Phase 3.3)
+# Defaults to same parent as GUARDIAN_URL
+if GUARDIAN_URL:
+    HITL_CLOUD_URL = GUARDIAN_URL.rsplit("/", 1)[0] if "/" in GUARDIAN_URL else GUARDIAN_URL
+else:
+    HITL_CLOUD_URL = os.getenv("HITL_CLOUD_URL", "")
+
 # Audit Logger Configuration — same Central Service as Guardian
 AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", "~/.config/aw-aiguard/audit_buffer.jsonl")
 
@@ -70,7 +77,9 @@ scanner = PIIScanner(
 hitl = HITLGate(
     rules_path=HITL_RULES_PATH,
     default_timeout=HITL_DEFAULT_TIMEOUT,
-    notification_mode=HITL_NOTIFICATION_MODE
+    notification_mode=HITL_NOTIFICATION_MODE,
+    cloud_url=HITL_CLOUD_URL or None,  # Phase 3.3
+    api_key=API_KEY or "default",      # Phase 3.3
 )
 
 # Initialize the BYOC Engine
@@ -117,6 +126,13 @@ async def lifespan(app: FastAPI):
     if byoc.cloud_url and BYOC_SYNC_INTERVAL > 0:
         byoc_sync_task = asyncio.create_task(_byoc_sync_loop())
         logger.info(f"BYOC sync loop started (interval={BYOC_SYNC_INTERVAL}s).")
+
+    # Phase 3.3: Recover pending HITL requests from cloud on startup
+    if hitl.cloud_url:
+        try:
+            await hitl._recover_pending_from_cloud()
+        except Exception:
+            logger.warning("HITL cloud recovery failed — starting with local state only")
 
     yield
 

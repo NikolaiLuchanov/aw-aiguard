@@ -5,6 +5,7 @@ Uses asyncpg for async connection pooling. Provides typed INSERT helpers
 for audit_logs, provenance, and settings_history tables.
 """
 
+import json
 import os
 import sys
 import logging
@@ -233,6 +234,67 @@ class AuditDB:
                 request_id,
             )
             return dict(row) if row else None
+
+    # ------------------------------------------------------------------ #
+    # Phase 3.3 — HITL cloud persistence helpers
+    # ------------------------------------------------------------------ #
+
+    async def create_hitl_approval(
+        self,
+        request_id: str,
+        api_key: str,
+        prompt_hash: str,
+        prompt_snippet: str,
+        rule_name: str,
+        timeout_at: str,  # ISO format TIMESTAMPTZ
+        provenance: Optional[Dict] = None,
+    ) -> int:
+        """
+        Insert a pending HITL approval row.
+        decision IS NULL means "pending".
+        Returns the row id.
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                INSERT INTO hitl_approvals
+                    (request_id, api_key, prompt_hash, prompt_snippet,
+                     rule_name, timeout_at, provenance)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id
+            """, request_id, api_key, prompt_hash, prompt_snippet,
+                   rule_name, timeout_at,
+                   json.dumps(provenance) if provenance else None)
+            return row["id"]
+
+    async def get_pending_hitl_by_api_key(
+        self, api_key: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Return pending HITL requests for a specific API key.
+        Used by gateway restart recovery.
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT id, request_id, approver_id, prompt_hash, prompt_snippet,
+                       rule_name, api_key, timeout_at, decided_at, created_at, provenance
+                FROM hitl_approvals
+                WHERE api_key = $1 AND decision IS NULL
+                ORDER BY created_at DESC
+                LIMIT $2
+            """, api_key, limit)
+            return [dict(r) for r in rows]
+
+    async def get_hitl_decision(self, request_id: str) -> Optional[str]:
+        """
+        Return 'approved', 'denied', or None (pending/not found).
+        Lightweight — only fetches the decision column.
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchval(
+                "SELECT decision FROM hitl_approvals WHERE request_id = $1",
+                request_id,
+            )
+            return row  # 'approved', 'denied', or None
 
     async def list_byoc_rules(self, active_only: bool = True) -> List[Dict[str, Any]]:
         """List BYOC rules from cloud store."""

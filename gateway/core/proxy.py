@@ -308,7 +308,12 @@ class LLMProxy:
                 headers=dict(request.headers),
                 body=current_content,
             )
-            hitl_decision, hitl_request_id = await self.hitl.check_hitl(prompt, request_context=request_context)
+            hitl_decision, hitl_request_id = await self.hitl.check_hitl(
+                prompt,
+                request_context=request_context,
+                prompt_hash=prompt_hash,        # Phase 3.3
+                provenance=provenance.to_dict(), # Phase 3.3
+            )
             if hitl_decision == HitlDecision.PAUSE:
                 component_name = "hitl_gate"
                 await self.audit_logger.log_event(

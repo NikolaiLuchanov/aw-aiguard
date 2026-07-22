@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audit_db import AuditDB, AuditEvent, SettingsChange, ProvenanceEvent
 from partition_manager import PartitionManager
 from ui import setup_template_serving
-from shared.schemas import BYOCRuleCreate, SettingsOverrideChange
+from shared.schemas import BYOCRuleCreate, SettingsOverrideChange, HitlCreateRequest
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -408,6 +408,69 @@ async def dashboard_gateways():
     """List all registered gateways with liveness status."""
     gateways = await audit_db.get_online_gateways()
     return JSONResponse(content={"gateways": gateways})
+
+
+# ------------------------------------------------------------------ #
+# Phase 3.3 — Cloud-persisted HITL bridge endpoints
+# ------------------------------------------------------------------ #
+
+@app.post("/dashboard/hitl/create")
+async def hitl_create(request: HitlCreateRequest):
+    """
+    Create a pending HITL approval row. Called by gateway on pause.
+    Request body: { request_id, api_key, prompt_hash, prompt_snippet,
+                    rule_name, timeout_at, provenance }
+    """
+    try:
+        row_id = await audit_db.create_hitl_approval(
+            request_id=request.request_id,
+            api_key=request.api_key,
+            prompt_hash=request.prompt_hash,
+            prompt_snippet=request.prompt_snippet,
+            rule_name=request.rule_name,
+            timeout_at=request.timeout_at,
+            provenance=request.provenance,
+        )
+        return JSONResponse(content={"status": "created", "id": row_id})
+    except Exception:
+        logger.exception("Failed to create HITL approval")
+        return JSONResponse(
+            content={"error": "Internal database error"}, status_code=500
+        )
+
+
+@app.get("/dashboard/hitl/recover/{request_id}")
+async def hitl_recover(request_id: str):
+    """
+    Recover a HITL request for gateway restart.
+    Returns full row data including stored decision.
+    """
+    row = await audit_db.get_hitl_request(request_id)
+    if not row:
+        return JSONResponse(content={"error": "Not found"}, status_code=404)
+    return JSONResponse(content=row)
+
+
+@app.get("/dashboard/hitl/decision/{request_id}")
+async def hitl_decision(request_id: str):
+    """
+    Return only the recorded decision for a HITL request.
+    Used by gateway's _get_cloud_decision() in cleanup loop.
+    """
+    decision = await audit_db.get_hitl_decision(request_id)
+    if decision is None:
+        return JSONResponse(content={"decision": None})
+    return JSONResponse(content={"decision": decision})
+
+
+@app.get("/dashboard/hitl/pending_by_key/{api_key}")
+async def hitl_pending_by_key(api_key: str, limit: int = 100):
+    """
+    Return all pending HITL requests for a given API key.
+    Used by gateway restart recovery.
+    """
+    rows = await audit_db.get_pending_hitl_by_api_key(api_key, limit)
+    return JSONResponse(content={"requests": rows})
 
 
 if __name__ == "__main__":

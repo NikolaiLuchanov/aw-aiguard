@@ -6,10 +6,16 @@
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">HITL Approval Queue</h1>
-        <button hx-get="/dashboard/hitl/pending" hx-swap="innerHTML" hx-target="#hitl-table-body"
-                class="px-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600">
-            Refresh
-        </button>
+        <div class="flex gap-2">
+            <!-- Filter by API key -->
+            <select id="api-key-filter" class="px-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded border border-slate-300 dark:border-slate-600">
+                <option value="">All API Keys</option>
+            </select>
+            <button id="refresh-btn"
+                    class="px-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600">
+                Refresh
+            </button>
+        </div>
     </div>
 
     <div class="bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -20,12 +26,13 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Prompt Snippet</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">API Key</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Timeout</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Decision</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
             <tbody id="hitl-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
                 <tr>
-                    <td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">Loading...</td>
+                    <td colspan="6" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">Loading...</td>
                 </tr>
             </tbody>
         </table>
@@ -38,19 +45,49 @@
         const res = await fetch('/dashboard/hitl/pending');
         const data = await res.json();
         const tbody = document.getElementById('hitl-table-body');
+        const filterSelect = document.getElementById('api-key-filter');
 
-        if (!data.pending_requests || data.pending_requests.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No pending requests</td></tr>';
+        // Collect unique API keys for filter
+        const apiKeys = new Set();
+        const pendingRequests = data.pending_requests || [];
+
+        pendingRequests.forEach(req => {
+            if (req.api_key) apiKeys.add(req.api_key);
+        });
+
+        // Update filter dropdown (preserve current selection)
+        const currentFilter = filterSelect.value;
+        filterSelect.innerHTML = '<option value="">All API Keys</option>';
+        apiKeys.forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = key;
+            if (key === currentFilter) opt.selected = true;
+            filterSelect.appendChild(opt);
+        });
+
+        // Filter by selected API key if any
+        const selectedKey = filterSelect.value;
+        const filtered = selectedKey
+            ? pendingRequests.filter(r => r.api_key === selectedKey)
+            : pendingRequests;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No pending requests</td></tr>';
             return;
         }
 
-        tbody.innerHTML = data.pending_requests.map(req => `
+        tbody.innerHTML = filtered.map(req => {
+            const decisionStatus = getDecisionStatus(req);
+            return `
             <tr id="hitl-${req.request_id}">
                 <td class="px-6 py-4 text-sm">${req.rule_name || 'N/A'}</td>
                 <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-md truncate">${(req.prompt_snippet || '').substring(0, 150)}${(req.prompt_snippet || '').length > 150 ? '...' : ''}</td>
                 <td class="px-6 py-4 text-sm font-mono text-slate-500 dark:text-slate-400">${req.api_key || 'N/A'}</td>
                 <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">${req.timeout_at || 'N/A'}</td>
+                <td class="px-6 py-4 text-sm">${decisionStatus}</td>
                 <td class="px-6 py-4 text-sm">
+                    ${req.decision === null ? `
                     <button hx-post="/dashboard/hitl/approve/${req.request_id}?approver_id=user"
                             hx-swap="outerHTML" hx-target="#hitl-${req.request_id}"
                             class="px-3 py-1 text-sm bg-success text-white rounded hover:bg-green-600 mr-2">
@@ -60,11 +97,28 @@
                             hx-swap="outerHTML" hx-target="#hitl-${req.request_id}"
                             class="px-3 py-1 text-sm bg-danger text-white rounded hover:bg-red-600">
                         ✗ Deny
-                    </button>
+                    </button>` : ''}
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
     }
+
+    // Determine decision status display
+    function getDecisionStatus(req) {
+        // Phase 3.3: decision field may be null (pending), 'approved', or 'denied'
+        if (req.decision === 'approved') {
+            return '<span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200">Approved</span>';
+        } else if (req.decision === 'denied') {
+            return '<span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full dark:bg-red-900 dark:text-red-200">Denied</span>';
+        } else if (req.decision === null) {
+            return '<span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full dark:bg-yellow-900 dark:text-yellow-200">Pending</span>';
+        }
+        return '<span class="text-slate-400">Unknown</span>';
+    }
+
+    // Event listeners
+    document.getElementById('refresh-btn').addEventListener('click', loadPending);
+    document.getElementById('api-key-filter').addEventListener('change', loadPending);
 
     loadPending();
 </script>

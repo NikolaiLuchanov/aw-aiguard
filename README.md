@@ -93,20 +93,25 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-- `tests/`: 214 pytest tests covering all safety layers.
+- `tests/`: 394 pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
   - `gateway/test_hitl.py` — HITLGate: pause/approve/deny/expiry, status, RequestContext, custom rules
+  - `gateway/test_hitl_cloud.py` — HITLGate cloud sync: _sync_hitl_to_cloud, _recover_from_cloud, _recover_pending_from_cloud, cleanup loop cloud checks, expired recovery (12 tests)
   - `gateway/test_byoc.py` — BYOCEngine: pattern rules, rate limits, hard_stop/soft_block enforcement
   - `gateway/test_block.py` — BlockReason codes, generate_block_response (403 JSON body)
   - `gateway/test_audit.py` — AuditLogger: queue, buffer write, replay, flush, lifecycle
   - `gateway/test_proxy.py` — LLMProxy: safe pass-through, guardian block, byoc block, hitl pause, streaming
   - `gateway/test_provenance.py` — Provenance: from_headers, from_dict, default, to_dict, is_low_trust, is_known
   - `gateway/test_proxy_provenance.py` — Proxy pipeline provenance integration (6 tests)
+  - `gateway/test_proxy_hitl_cloud.py` — Proxy HITL cloud provenance passing: provenance→check_hitl, prompt_hash injection, empty provenance handling, cloud decision resume (5 tests)
   - `central_service/test_alert_engine.py` — Telegram/Slack/Email dispatch, severity mapping, emoji, credential warnings
-  - `central_service/test_api_server.py` — `_get_severity` mapping, settings YAML loading
-  - `central_service/test_audit_db.py` — AuditDB init, DEFAULT_SETTINGS, schema field alignment
+  - `central_service/test_api_server.py` — `_get_severity` mapping, settings YAML loading, cloud HITL endpoints
+  - `central_service/test_audit_db.py` — AuditDB init, DEFAULT_SETTINGS, schema field alignment, HITL cloud persistence methods
+  - `central_service/test_hitl_cloud.py` — Cloud HITL bridge: create_hitl_approval, get_pending_hitl_by_api_key, get_hitl_decision, mock pool interactions (12 tests)
+  - `central_service/test_dashboard_hitl.py` — Dashboard HITL endpoints: pending list, approve/deny, approval detail
+  - `central_service/test_hitl_endpoints.py` — Cloud-persisted HITL bridge endpoints: POST /hitl/approve, GET /hitl/decision, GET /hitl/recover, GET /hitl/recover/pending (14 tests)
 - `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
 
 ## 🧪 Testing
@@ -117,7 +122,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All 214 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All 394 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 
@@ -127,7 +132,7 @@ Test coverage maps directly to the safety pipeline layers:
 ||| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
 || L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
 || L3 | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key |
-|| L4 | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, full request replay |
+|| L4 | `gateway/core/hitl.py` | 38 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, cloud sync via Central Service, startup recovery from cloud, cleanup loop cloud decision checks, prompt_hash + provenance injection |
 || — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
 || — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
 || — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |

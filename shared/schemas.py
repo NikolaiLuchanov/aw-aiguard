@@ -102,3 +102,19 @@ class AuditLogQuery(BaseModel):
     event_type: Optional[str] = None
     component: Optional[str] = None
     api_key: Optional[str] = None
+
+
+# =================================================================== #
+# Phase 3.3 — Cloud-persisted HITL request creation
+# =================================================================== #
+
+
+class HitlCreateRequest(BaseModel):
+    """Request body for creating a pending HITL approval (called by gateway)."""
+    request_id: str
+    api_key: str
+    prompt_hash: str
+    prompt_snippet: str
+    rule_name: str
+    timeout_at: str  # ISO format TIMESTAMPTZ
+    provenance: Dict[str, Any] = {}
