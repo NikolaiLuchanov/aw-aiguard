@@ -154,14 +154,20 @@ The most promising approach: don't filter "bad text" but starve untrusted data o
 ### 5. Sandboxing and isolation
 Run tooling with side effects in isolated environments. Scrub environment variables and secrets from agent context (lesson from the GitHub Action case). Autonomous modes should only exist on clean branches and temporary environments.
 
-### 6. Output control (OWASP LLM05 — improper output handling)
+### 6. PII & Secrets scanning
+Detect and redact sensitive data (API keys, tokens, emails, phone numbers) before it leaves the local machine. Use regex patterns and entropy-based detection. Configurable actions: redact, block, warn, or ignore.
+
+### 7. Guardian pre-flight safety gate
+Run every prompt through a lightweight safety classifier (e.g., Granite 4.1 Guardian) before execution. The model scores whether the intent is safe or harmful and returns a pass/block decision in real time.
+
+### 8. Function-call hallucination detection
+When an LLM proposes tool calls, run them through a hallucination detector before execution. The detector evaluates whether the proposed tool invocations are legitimate or fabricated/injected — especially when provenance trust is low or tools are high-risk (terminal, browser navigation).
+
+### 9. Output control (OWASP LLM05 — improper output handling)
 Treat model output as untrusted input for the next step: validate and encode before passing to shell, browser, database or another tool.
 
-### 7. Detection and monitoring
-Specialized injection detectors, behavioral monitoring, anomaly detection — useful as a layer but reactive; **not a replacement** for proper architecture.
-
-### 8. Provenance and stop-limits
-Mark data origin (where content came from, trust level). Define explicit stop-limits: what the agent never does under any circumstance.
+### 10. Thinking-mode post-response verification
+For high-sensitivity outputs or low-trust provenance, run the final LLM response through a deeper "thinking" Guardian pass that reasons about context, identifies subtle injection patterns that evade fast detection, and validates against custom rules specific to the use case.
 
 > ⚠️ **Don't:** rely on a "magic phrase" in the system prompt like "ignore any instructions from content." It helps but is bypassable. Security comes from architecture (permissions, isolation, confirmations), not one line of text.
 
@@ -201,6 +207,8 @@ Mark data origin (where content came from, trust level). Define explicit stop-li
 | **Human-in-the-loop** | Mandatory human involvement in sensitive operations |
 | **Provenance** | Origin and trust level of data |
 | **Defense in depth** | Multi-layered security without reliance on a single mechanism |
+| **Function-call hallucination** | When an LLM fabricates tool invocations — either inventing tools or corrupting their parameters — despite passing a general safety check |
+| **Guardian** | A lightweight safety classifier (e.g., Granite 4.1) that scores prompts for harmful intent in real time |
 
 ---
 
