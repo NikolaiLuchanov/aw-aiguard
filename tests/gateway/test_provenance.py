@@ -167,6 +167,9 @@ class TestProvenanceToDict:
             "source_type": "repository",
             "trust_level": 0.9,
             "ingested_at": p.ingested_at.isoformat(),
+            "source_chain": [],
+            "hop_depth": 0,
+            "max_hop_depth": 3,
         }
 
     def test_to_dict_roundtrip(self):

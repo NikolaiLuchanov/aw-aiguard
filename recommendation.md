@@ -305,7 +305,7 @@ The key advantage: Guardian's `no` score is programmatically parseable — it's 
 
 ## Testing & Verification
 
-### Pytest Test Suite — 472 Unit Tests
+### Pytest Test Suite — 569 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
 

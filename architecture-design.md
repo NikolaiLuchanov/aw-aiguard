@@ -1,5 +1,5 @@
 # aw-aiguard: Central Guardrail & Audit Service Architecture
-**Date:** 2026-06-28 | **Status:** Design Draft v1.2 (Updated: HITL gates, provenance tagging, stop-limits, data/command separation, LLM05 output validation, excessive agency safeguards, stored injection countermeasures)
+**Date:** 2026-07-23 | **Status:** Design Draft v1.3 (Updated: HITL gates, provenance tagging, stop-limits, data/command separation, LLM05 output validation, excessive agency safeguards, stored injection countermeasures, CaMeL structural enforcement, agency constraints)
 
 ---
 
@@ -253,11 +253,13 @@ Every audit log entry and payload MUST include a `provenance` object with the fo
 2. **Trust-gated operations:** Low-trust content (e.g., `trust_level < 0.5`) triggers additional Guardian checks, tighter BYOC validation, and mandatory HITL gates before any write/deliver operation.
 3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 6), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
 4. **Audit log provenance carry-through:** Every downstream transformation carries the original provenance chain forward so root-cause attribution is always possible.
+5. **Agency chain tracking (Phase 4.5.2):** Each delegation hop adds a record to `source_chain` and increments `hop_depth`. Max depth (default 3) prevents recursive injection through sub-agent chains.
 
 **Never do this (stop-limits applied to provenance):**
 - Never allow high-trust and low-trust content into the same prompt context without explicit tagging of provenance boundaries.
 - Never omit provenance for any data source, even trusted internal ones. Absence of provenance = maximum suspicion.
 - Never execute irreversible operations on outputs derived from unclassified / undocumented provenance sources.
+- Never exceed max delegation depth without explicit approval — the agency controller blocks all chains beyond the configured limit.
 
 ---
 
@@ -474,5 +476,5 @@ aw-aiguard/
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
 | P2 | Provenance tagging schema + enforcement (Section 5) | ✅ Phase 2.5 | Pairs with audit infrastructure |
 | P2 | Centralized config sync (Section 9) | ✅ Phase 3.4 | Gateway heartbeat, settings poll loop, diff detection, hot-reload |
-| P2 | Sub-agent chain depth limit logic (Section 7A) | Sprint 2-3 | Prevent infinite delegation graph traversal |
-| P2 | Data/command separation schemas (Section 3.5) | Sprint 3 | Validate all tool-call parameters against typed JSON schema |
+|| P2 | Sub-agent chain depth limit logic (Section 7A) | ✅ Phase 4.5.2 | AgencyController enforces max depth with provenance chain tracking |
+|| P2 | Data/command separation schemas (Section 3.5) | ✅ Phase 4.5.1 | SchemaValidator validates all tool-call parameters against JSON schemas |

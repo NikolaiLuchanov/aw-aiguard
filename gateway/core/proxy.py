@@ -18,6 +18,8 @@ from gateway.core.function_call_detector import FunctionCallDetector, FunctionCa
 from gateway.core.sanitizer import IngestionSanitizer
 from gateway.core.output_control import OutputController
 from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
+from gateway.core.schema_validator import SchemaValidator
+from gateway.core.agency_controller import AgencyController, AgencyCheckResult
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -38,9 +40,11 @@ class LLMProxy:
         hitl: Optional[HITLGate] = None,
         byoc: Optional[BYOCEngine] = None,
         detector: Optional[FunctionCallDetector] = None,  # Phase 4.1
+        validator: Optional[SchemaValidator] = None,       # Phase 4.5.1
         sanitizer: Optional[IngestionSanitizer] = None,    # Phase 4.2
         output_controller: Optional[OutputController] = None, # Phase 4.3
         thinking_verifier: Optional[ThinkingModeVerifier] = None,  # Phase 4.4
+        agency_controller: Optional[AgencyController] = None,     # Phase 4.5.2
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -51,9 +55,11 @@ class LLMProxy:
         self.hitl = hitl
         self.byoc = byoc
         self.detector = detector
+        self.validator = validator
         self.sanitizer = sanitizer
         self.output_controller = output_controller
         self.thinking_verifier = thinking_verifier  # Phase 4.4
+        self.agency_controller = agency_controller    # Phase 4.5.2
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -337,7 +343,67 @@ class LLMProxy:
                     reason=byoc_result.message, prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                 ) if self.audit_logger else None
 
-        # Layer 4: HITL Check (after PII + Guardian + BYOC have cleared the request)
+        # Phase 4.5.1: CaMeL Schema Validator (validate tool parameters against JSON schema)
+        # Between Function-Call Detector (4.1) and BYOC (L3)
+        if self.validator and body and isinstance(body, dict):
+            # Extract tool name and parameters from request body
+            tool_name = (
+                body.get("tool_name")
+                or body.get("function")
+                or body.get("tool")
+                or ""
+            )
+            parameters = body.get("parameters") or body.get("input") or body.get("arguments") or {}
+            if tool_name and parameters:
+                validation_result = self.validator.validate(tool_name, parameters)
+                if not validation_result.valid:
+                    component_name = "schema_validator"
+                    await self.audit_logger.log_event(
+                        self.api_key, "block", component_name, prompt,
+                        reason=f"Schema validation failed: {', '.join(validation_result.errors)}",
+                        blocked_by="schema_validator",
+                        prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                    ) if self.audit_logger else None
+                    return generate_block_response(
+                        reason=BlockReason.SCHEMA_VALIDATION_FAILED,
+                        message=f"Tool '{tool_name}' parameters failed schema validation: {'; '.join(validation_result.errors)}",
+                        blocked_by="schema_validator",
+                    )
+
+        # Phase 4.5.2: Agency Controller (delegation depth limits & chain integrity)
+        # Between BYOC (L3) and HITL (L4)
+        if self.agency_controller and prompt:
+            # Extract tool name for agency check
+            tool_name = (
+                body.get("tool_name")
+                or body.get("function")
+                or body.get("tool")
+                or ""
+            )
+            agency_result = self.agency_controller.check_delegation(provenance, tool_name)
+            if not agency_result.allowed:
+                component_name = "agency_controller"
+                # Map reason to appropriate BlockReason
+                if "depth" in agency_result.reason.lower():
+                    block_reason = BlockReason.AGENCY_DEPTH_EXCEEDED
+                elif "chain" in agency_result.reason.lower():
+                    block_reason = BlockReason.AGENCY_CHAIN_BROKEN
+                else:
+                    block_reason = BlockReason.AGENCY_APPROVAL_REQUIRED
+
+                await self.audit_logger.log_event(
+                    self.api_key, "block", component_name, prompt,
+                    reason=agency_result.reason,
+                    blocked_by="agency_controller",
+                    prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                ) if self.audit_logger else None
+                return generate_block_response(
+                    reason=block_reason,
+                    message=agency_result.reason,
+                    blocked_by="agency_controller",
+                )
+
+        # Layer 4: HITL Check (after PII + Guardian + BYOC + Schema + Agency have cleared the request)
         if prompt and self.hitl:
             # Build request context for HITL resume (store full request for replay after approval)
             request_context = RequestContext(

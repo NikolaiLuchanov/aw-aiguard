@@ -15,7 +15,9 @@ aw-aiguard/                          # Project root
 │   │   ├── sanitizer.py              # Ingestion sanitization for stored injection (Phase 4.2)
 │   │   ├── thinking_mode.py          # Thinking-mode verification for post-response Guardian check (Phase 4.4)
 │   │   ├── output_control.py         # LLM05 output control: schema validation, HTML escaping (Phase 4.3)
-│   │   ├── provenance.py            # Provenance dataclass: extraction, serialization, trust-level checks, sanitization tracking
+│   │   ├── schema_validator.py        # CaMeL JSON schema validation for tool parameters (Phase 4.5.1)
+│   │   ├── agency_controller.py       # Delegation depth & chain integrity (Phase 4.5.2)
+│   │   ├── provenance.py              # Provenance dataclass: extraction, serialization, trust-level checks, sanitization tracking, agency depth/hop tracking
 │   │   └── audit.py                 # Async audit logger (queue → backend, JSONL fallback)
 │   ├── main.py                      # FastAPI server entry point
 │   ├── middleware/                   # Additional HTTP middleware
@@ -39,10 +41,13 @@ aw-aiguard/                          # Project root
 │   ├── thinking_mode_rules.yaml       # Thinking-mode verification config (thresholds, actions, fail strategy)
 │   ├── byoc_rules.yaml               # BYOC stop-limits (patterns, enforcement, severity)
 │   └── function_call_rules.yaml      # Function-call hallucination detection rules (Phase 4.1)
+│   ├── tool_schemas.yaml               # CaMeL JSON schemas for tool parameters (Phase 4.5.1)
+│   ├── camel_rules.yaml                # CaMeL enforcement rules (hard_stop) (Phase 4.5.1)
+│   └── agency_rules.yaml               # Delegation depth & agency constraints (Phase 4.5.2)
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 472 pytest unit tests
+├── tests/                            # 569 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
 │   ├── gateway/                      # Gateway layer tests
 │   │   ├── test_guardrail.py         # GuardianGuard: allow/block/warn/fail-strategies
@@ -59,7 +64,10 @@ aw-aiguard/                          # Project root
 │   │   └── test_function_call_detector.py # Function-call hallucination detection (Phase 4.1)
 │   │   ├── test_sanitizer.py          # IngestionSanitizer: 12 patterns, action modes (Phase 4.2)
 │   │   ├── test_output_control.py     # Output schema validation, HTML escaping, shell/DB quoting (Phase 4.3)
-│   │   └── test_thinking_mode.py      # Thinking-mode verification: decision matrix, Guardian integration (Phase 4.4)
+│   │   ├── test_thinking_mode.py      # Thinking-mode verification: decision matrix, Guardian integration (Phase 4.4)
+│   │   ├── test_schema_validator.py   # CaMeL JSON schema validation for tool parameters (Phase 4.5.1)
+│   │   ├── test_agency_controller.py  # Delegation depth & chain integrity (Phase 4.5.2)
+│   │   └── test_phase4_integration.py # End-to-end: schema + agency integration tests
 │   ├── central_service/              # Central service tests
 │   │   ├── test_alert_engine.py      # Telegram/Slack/Email dispatch, severity mapping
 │   │   ├── test_api_server.py        # Severity mapping, settings YAML loading, HITL endpoints
@@ -98,7 +106,9 @@ aw-aiguard/                          # Project root
 || **L4** | `hitl.py` | Human-in-the-loop: pause for irreversible actions |
 || **L5** | `thinking_mode.py` | Thinking-mode Guardian verification for low-trust/high-risk outputs (Phase 4.4) |
 || **L6** | *(post-response)* | Thinking-mode Guardian verification for high-risk outputs |
-| **L6B** | *(post-response)* | OWASP LLM05 output control: schema validation, escaping |
+|| **L6B** | *(post-response)* | OWASP LLM05 output control: schema validation, escaping |
+|| **L5.1** | *(pre-forward)* | CaMeL JSON schema validation for tool parameters (Phase 4.5.1) |
+|| **L5.2** | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.5.2) |
 
 ## Test Count by Module
 
@@ -118,5 +128,8 @@ aw-aiguard/                          # Project root
 | API Server | `test_api_server.py` | 11 |
 | Audit DB | `test_audit_db.py` + `test_hitl_cloud.py` + `test_dashboard_hitl.py` + `test_hitl_endpoints.py` | 39 |
 | Partition Manager | `test_partition_manager.py` | 10 |
-| Shared Schemas | `test_schemas.py` | 10 |
-|| **Total** | | **520** |
+|| Shared Schemas | `test_schemas.py` | 10 |
+|| CaMeL Validator | `test_schema_validator.py` | 20 |
+|| Agency Controller | `test_agency_controller.py` | 12 |
+|| Phase 4.5 Integration | `test_phase4_integration.py` | 10 |
+|| **Total** | | **569** |

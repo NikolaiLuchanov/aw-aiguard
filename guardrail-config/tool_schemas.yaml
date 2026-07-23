@@ -1,0 +1,76 @@
+# CaMeL Structural Enforcement — JSON Schemas for Tool-Call Parameters
+# All tool-call parameters must validate against their schema before reaching the target API.
+# Unknown tools pass through with a warning (not blocked).
+#
+# Supported jsonschema Draft-7 constraints: type, required, properties, items,
+#   maxLength, minLength, minimum, maximum, format, pattern.
+
+schemas:
+  terminal:
+    type: object
+    required: [command]
+    properties:
+      command:
+        type: string
+        pattern: '^[a-zA-Z0-9/_\\.\\-\\+\\*\\?\\[\\] ]+$'
+        maxLength: 1024
+      working_directory:
+        type: string
+        pattern: '^/[a-zA-Z0-9/_\\.\\-\\[\\]]+$'
+      timeout:
+        type: integer
+        minimum: 1
+        maximum: 3600
+
+  browser_navigate:
+    type: object
+    required: [url]
+    properties:
+      url:
+        type: string
+        format: uri
+        pattern: '^(https?|file)://.*$'
+
+  delegate_task:
+    type: object
+    required: [task]
+    properties:
+      task:
+        type: string
+        maxLength: 4096
+      max_depth:
+        type: integer
+        minimum: 1
+        maximum: 5
+
+  web_search:
+    type: object
+    required: [query]
+    properties:
+      query:
+        type: string
+        minLength: 1
+        maxLength: 512
+
+  file_read:
+    type: object
+    required: [path]
+    properties:
+      path:
+        type: string
+        pattern: '^[a-zA-Z0-9/_\\.\-\\[\\]]+$'
+        maxLength: 2048
+
+  email_send:
+    type: object
+    required: [to, subject, body]
+    properties:
+      to:
+        type: string
+        format: email
+      subject:
+        type: string
+        maxLength: 256
+      body:
+        type: string
+        maxLength: 10000

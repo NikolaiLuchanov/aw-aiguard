@@ -1,0 +1,22 @@
+# CaMeL Structural Enforcement — Enforcement Rules
+# These rules define how schema validation failures are handled.
+#
+# enforcement levels:
+#   hard_stop  — Immediate 403 block, no override possible
+#   soft_block — Log warning + alert, request continues
+
+rules:
+  - name: validate_all_tool_schemas
+    enforcement: hard_stop
+    severity: critical
+    description: All tool parameters must match their JSON schema
+
+  - name: no_string_concat_in_commands
+    enforcement: hard_stop
+    severity: critical
+    description: Untrusted data must never be concatenated into shell commands
+
+  - name: parameterized_queries_only
+    enforcement: hard_stop
+    severity: critical
+    description: All DB queries must use parameterized forms

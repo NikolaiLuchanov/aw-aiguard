@@ -16,7 +16,7 @@
 | **4.5.3** | Integration test suite | End-to-end pipeline | Multi-layer interactions | 10 |
 | **4.5.4** | Documentation updates | N/A | Knowledge base consistency | — |
 
-**Total new tests:** 42 + existing 520 = **562 tests**
+**Total new tests:** 49 + existing 520 = **569 tests**
 
 ---
 
@@ -596,10 +596,10 @@ Deliver to Client
 |---|---|
 | `IMPLEMENTATION_PLAN.md` | Mark 4.5.1, 4.5.2, 4.5.3 complete; update test counts |
 | `IMPLEMENTATION_PLAN_PHASE_4.md` | Mark 4.5, 4.6, 4.7 complete; update test counts; finalize pipeline order |
-| `structure.md` | Add `schema_validator.py`, `agency_controller.py` to directory tree; update test count (520 → 562) |
+|| `structure.md` | Add `schema_validator.py`, `agency_controller.py` to directory tree; update test count (520 → 569) |
 | `architecture-design.md` | Add CaMeL + agency sections as implemented (remove dashed styling from diagram references) |
 | `architecture_workflow.html` | Add JSON schema validation box between function-call check and BYOC; add agency controller box between BYOC and HITL |
-| `recommendation.md` | Update test count to 562; mark Phase 4.5 tasks as complete |
+| `recommendation.md` | Update test count to 569; mark Phase 4.5 tasks as complete |
 | `gateway/README.md` | Add sections for Schema Validator and Agency Controller |
 | `guardrail-config/README.md` | Add entries for `tool_schemas.yaml`, `camel_rules.yaml`, `agency_rules.yaml` |
 
@@ -641,20 +641,20 @@ Phase 4.5.4 (Documentation) — Depends on code being stable
 
 After Phase 4.5 completion:
 
-- [ ] `jsonschema` dependency installed and importable
-- [ ] All 42 new tests pass (`pytest tests/ -v`)
-- [ ] No existing tests broken (total: 562 tests)
-- [ ] Proxy pipeline processes a full request through all 9 layers
-- [ ] Malformed tool parameters blocked at schema validator (403 + SCHEMA_VALIDATION_FAILED)
-- [ ] Unknown tools pass through with warning log (not blocked)
-- [ ] Delegation depth enforced: 4-hop chain blocked at agency controller
-- [ ] Chain-broken detection works for missing hops
-- [ ] `source_chain` carried through provenance in audit logs
-- [ ] All layers produce audit entries with correct components
-- [ ] Alert engine fires for all block events
-- [ ] Configuration hot-reload works for all new YAML files
-- [ ] Documentation updated for all new modules
-- [ ] Architecture diagram reflects new pipeline positions
+- [x] `jsonschema` dependency installed and importable (jsonschema==4.23.0, v4.26.0 in venv)
+- [x] All 42 new tests pass (`pytest tests/ -v`)
+- [x] No existing tests broken (total: 569 tests, 0 failures)
+- [x] Proxy pipeline processes a full request through all 9 layers
+- [x] Malformed tool parameters blocked at schema validator (403 + SCHEMA_VALIDATION_FAILED)
+- [x] Unknown tools pass through with warning log (not blocked)
+- [x] Delegation depth enforced: 4-hop chain blocked at agency controller
+- [x] Chain-broken detection works for missing hops
+- [x] `source_chain` carried through provenance in audit logs
+- [x] All layers produce audit entries with correct components
+- [x] Alert engine fires for all block events
+- [x] Configuration hot-reload works for all new YAML files
+- [x] Documentation updated for all new modules
+- [x] Architecture diagram reflects new pipeline positions
 
 ---
 
@@ -670,5 +670,5 @@ After Phase 4.5 completion:
 | 4.5.2 | `test_agency_controller.py` | 12 |
 | 4.5.3 | `test_phase4_integration.py` | 10 |
 | **Phase 4 total** | | **131** |
-| Phases 1-3 (existing) | | **520** |
-| **Grand total** | | **562** |
+| Phases 1-3 (existing) | | **438** |
+| **Grand total** | | **569** |

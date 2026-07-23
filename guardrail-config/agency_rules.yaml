@@ -1,0 +1,19 @@
+# Agency Constraints — Sub-Agent Delegation & Chain Integrity
+# Controls delegation depth limits, MCP server vetting, and approval requirements.
+
+rules:
+  max_delegation_depth: 3
+  allowlist:
+    - "terminal"
+    - "file_read"
+    - "web_search"
+  require_approval_for:
+    - "file_write"
+    - "shell_execute"
+    - "email_send"
+    - "commit"
+    - "deploy"
+  mcp_server_vetting:
+    mode: "allowlist"
+    allowlist: []
+    blocklist: []

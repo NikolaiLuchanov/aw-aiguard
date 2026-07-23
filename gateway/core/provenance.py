@@ -31,6 +31,10 @@ class Provenance:
     ingested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     sanitization_applied: bool = False
     dangerous_patterns_detected: list = field(default_factory=list)
+    # Phase 4.5: Agency constraints — sub-agent chain tracking
+    source_chain: list = field(default_factory=list)
+    hop_depth: int = 0
+    max_hop_depth: int = 3
 
     def to_dict(self) -> Dict:
         """Serialize to dict for JSON/audit/log storage."""
@@ -39,6 +43,9 @@ class Provenance:
             "source_type": self.source_type,
             "trust_level": self.trust_level,
             "ingested_at": self.ingested_at.isoformat(),
+            "source_chain": self.source_chain,
+            "hop_depth": self.hop_depth,
+            "max_hop_depth": self.max_hop_depth,
         }
 
     @classmethod
@@ -51,6 +58,9 @@ class Provenance:
             ingested_at=datetime.fromisoformat(data["ingested_at"])
                 if "ingested_at" in data and data["ingested_at"]
                 else datetime.now(timezone.utc),
+            source_chain=data.get("source_chain", []),
+            hop_depth=int(data.get("hop_depth", 0)),
+            max_hop_depth=int(data.get("max_hop_depth", 3)),
         )
 
     @classmethod
@@ -115,3 +125,28 @@ class Provenance:
     def has_dangerous_patterns(self) -> bool:
         """Return True if dangerous patterns were detected during sanitization."""
         return len(self.dangerous_patterns_detected) > 0
+
+    # --- Phase 4.5: Agency constraints ---
+
+    def increment_depth(self) -> "Provenance":
+        """Increment hop_depth and add current provenance to source_chain. Returns self for chaining."""
+        self.hop_depth += 1
+        self.source_chain.append({
+            "source_id": self.source_id,
+            "source_type": self.source_type,
+            "trust_level": self.trust_level,
+            "hop_index": self.hop_depth - 1,
+        })
+        return self
+
+    def is_within_depth_limit(self) -> bool:
+        """Return True if hop_depth is below max_hop_depth."""
+        return self.hop_depth < self.max_hop_depth
+
+    def is_chain_broken(self) -> bool:
+        """Detect if provenance chain has gaps — e.g., missing hops or trust_level resets."""
+        if len(self.source_chain) < 2:
+            return False
+        # Check for continuity: hop_index should be sequential
+        indices = [hop["hop_index"] for hop in self.source_chain]
+        return indices != list(range(len(indices)))

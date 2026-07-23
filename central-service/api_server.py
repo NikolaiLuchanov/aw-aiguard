@@ -78,6 +78,10 @@ def _get_severity(event: AuditEvent) -> str:
             return "CRITICAL"
         if event.component == "thinking_mode_verifier":
             return "CRITICAL"
+        if event.component == "schema_validator":
+            return "CRITICAL"
+        if event.component == "agency_controller":
+            return "HIGH"
         return "HIGH"
     if event.event_type == "warn":
         if event.component == "function_call_detector":
@@ -87,6 +91,10 @@ def _get_severity(event: AuditEvent) -> str:
         if event.component == "output_control":
             return "WARNING"
         if event.component == "thinking_mode_verifier":
+            return "WARNING"
+        if event.component == "schema_validator":
+            return "WARNING"
+        if event.component == "agency_controller":
             return "WARNING"
         return "WARNING"
     if event.event_type == "pause":

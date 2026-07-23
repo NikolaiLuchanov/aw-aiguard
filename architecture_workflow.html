@@ -53,13 +53,14 @@
 <body>
     <h1>aw-aiguard: High-Level Architecture Workflow</h1>
     <p style="max-width:1400px; margin:-20px 0 30px; color:#555; font-size:0.95em; line-height:1.6;">
-        Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 7-layer security pipeline.
+        Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 9-layer security pipeline.
         Per the threat model (<code>summary.md</code>), attackers target 4 goals:
         <strong>data exfiltration</strong> (L1+L4+L5),
         <strong>action hijack</strong> (L5 HITL),
         <strong>quiet commands</strong> (L4 BYOC + L5 HITL), and
         <strong>answer manipulation</strong> (L6+L6B).
         Indirect (data-borne) injection is mitigated by provenance tagging (L0) + trust-gated Guardian scoring (L2).
+        CaMeL structural enforcement (L5.1) validates tool parameters; agency constraints (L5.2) limit sub-agent delegation depth.
     </p>
     <div class="container">
         <div class="mermaid">
@@ -91,7 +92,8 @@ flowchart TD
             P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
             P1["PII & Secrets Scanning<br/>(SCAN_ACTION_MODE=block)"]
             P3{"Function-Call<br/>Hallucination Check<br/>(Phase 4.1 ✅)"}
-            P4["JSON Schema Validation<br/>CaMeL Separation<br/>[ROADMAP]"]
+            P4["Schema Validator<br/>CaMeL Enforcement<br/>[Phase 4.5.1 ✅]"]
+            P5["Agency Controller<br/>Delegation Limits<br/>[Phase 4.5.2 ✅]"]
         end
 
         %% Ingestion Sanitizer (Phase 4.2)
@@ -144,7 +146,8 @@ flowchart TD
     P1 --> P2
     P2 -.-> P3
     P3 -.-> P4
-    P4 -.-> Decision
+    P4 -.-> P5
+    P5 -.-> Decision
     
     %% Model Call Path
     P2 -.-> Model
@@ -183,7 +186,8 @@ flowchart TD
     style PostFlight fill:#f8fafc,stroke:#64748b,stroke-width:2px
     style BYOC fill:#fff8e1,stroke:#f57c00,stroke-width:2px
     style P3 fill:#f5f5f5,stroke:#adb5bd,stroke-width:2px,stroke-dasharray: 5 5
-    style P4 fill:#f5f5f5,stroke:#adb5bd,stroke-width:2px,stroke-dasharray: 5 5
+    style P4 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style P5 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
         </div>
     </div>
 </body>

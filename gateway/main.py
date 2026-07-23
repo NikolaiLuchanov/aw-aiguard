@@ -15,6 +15,8 @@ from gateway.core.hitl import HITLGate
 from gateway.core.byoc import BYOCEngine
 from gateway.core.audit import AuditLogger
 from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
+from gateway.core.schema_validator import SchemaValidator
+from gateway.core.agency_controller import AgencyController
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +114,19 @@ THINKING_MODE_RULES_PATH = os.path.join(
 thinking_config = ThinkingModeConfig.from_yaml(THINKING_MODE_RULES_PATH)
 thinking_verifier = ThinkingModeVerifier(guardian=guardian, config=thinking_config)
 
+# Phase 4.5: Initialize SchemaValidator and AgencyController
+TOOL_SCHEMAS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "tool_schemas.yaml"
+)
+CAMEL_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "camel_rules.yaml"
+)
+AGENCY_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "agency_rules.yaml"
+)
+schema_validator = SchemaValidator(schema_path=TOOL_SCHEMAS_PATH, rules_path=CAMEL_RULES_PATH)
+agency_controller = AgencyController(rules_path=AGENCY_RULES_PATH)
+
 # Initialize the Proxy Engine with all security components
 proxy_engine = LLMProxy(
     target_url=TARGET_URL, 
@@ -121,6 +136,7 @@ proxy_engine = LLMProxy(
     hitl=hitl,
     byoc=byoc,
     thinking_verifier=thinking_verifier,  # Phase 4.4
+    agency_controller=agency_controller,   # Phase 4.5.2
     audit_logger=audit_logger,
     scan_sequence=SCAN_SEQUENCE
 )

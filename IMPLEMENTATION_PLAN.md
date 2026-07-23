@@ -161,10 +161,25 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - `BlockReason.THINKING_MODE_WARNING` in `gateway/core/block.py` (used for audit logging).
     - Severity mapping: `thinking_mode_verifier` → `CRITICAL` (block), `WARNING` (warn) in `central-service/api_server.py`.
     - 23 unit tests in `tests/gateway/test_thinking_mode.py`.
-|- [ ] **4.5 CaMeL Structural Enforcement**
-    - Implement JSON schema validation for all tool-call parameters to prevent \"data-as-code\" injections.
-- [ ] **4.6 Agency Constraints**
+||- [x] **4.5 CaMeL Structural Enforcement** ✅
+    - Implement JSON schema validation for all tool-call parameters to prevent "data-as-code" injections.
+    - `SchemaValidator` (`gateway/core/schema_validator.py`): validates tool-call parameters against predefined JSON schemas (Draft 7) before they reach the target API or system command.
+    - Covers 6 tools: `terminal`, `browser_navigate`, `delegate_task`, `web_search`, `file_read`, `email_send` with per-tool schemas in `guardrail-config/tool_schemas.yaml`.
+    - CaMeL enforcement rules in `guardrail-config/camel_rules.yaml` with 3 rules (all `hard_stop`).
+    - `BlockReason.SCHEMA_VALIDATION_FAILED` for schema mismatch blocks.
+    - Hot-reload: `reload_schemas()` and `reload_rules()` for live rule updates.
+    - Integrated into `gateway/core/proxy.py` pipeline between Function-Call Detector and BYOC.
+    - `central-service/api_server.py`: `schema_validator` → `CRITICAL` severity.
+    - 20 unit tests in `tests/gateway/test_schema_validator.py` covering validation, config, hot-reload.
+- [x] **4.6 Agency Constraints** ✅
     - Implement max-hop depth limits for sub-agent delegation chains to prevent recursive injection attacks.
+    - `AgencyController` (`gateway/core/agency_controller.py`): enforces delegation depth limits, chain continuity validation, MCP server vetting (allowlist/blocklist), and action-level approval requirements.
+    - Configured via `guardrail-config/agency_rules.yaml`: `max_delegation_depth` (default 3), `allowlist` tools, `require_approval_for` tools, `mcp_server_vetting` with mode/allowlist/blocklist.
+    - `Provenance` extended with `source_chain` (list of hop records), `hop_depth`, `max_hop_depth`, plus methods: `increment_depth()`, `is_within_depth_limit()`, `is_chain_broken()`.
+    - Three new `BlockReason` codes: `AGENCY_DEPTH_EXCEEDED`, `AGENCY_CHAIN_BROKEN`, `AGENCY_APPROVAL_REQUIRED`.
+    - Integrated into `gateway/core/proxy.py` pipeline between BYOC and HITL.
+    - `central-service/api_server.py`: `agency_controller` → `HIGH` severity.
+    - 12 unit tests in `tests/gateway/test_agency_controller.py` covering depth checks, chain integrity, allowlist, approval, MCP vetting.
 
 ### Phase 5: Validation & Finalization
 *Goal: Stress test the architecture against adversarial attacks and prepare for production.*
@@ -200,7 +215,7 @@ The Gateway Proxy is designed to be stateless. The switch from local development
 
 ## 🧪 Testing
 
-### Pytest Test Suite — 520 Unit Tests
+### Pytest Test Suite — 569 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
 
@@ -217,6 +232,9 @@ pytest tests/ -v
 | **L1** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
 | **L2+** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes, aggressive mode, provenance tracking
 || **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement
+||| **L5.1** | `gateway/core/schema_validator.py` | 20 | CaMeL JSON schema validation for tool parameters, hot-reload
+||| **L5.2** | `gateway/core/agency_controller.py` | 12 | Delegation depth limits, chain integrity, MCP vetting, approval requirements
+|| — | `gateway/core/proxy.py` + `test_phase4_integration.py` | 10 | End-to-end: schema + agency integration across full pipeline
 || **L5** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies
 | **L2** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies, HTTP 500, timeout, payload shape |
 | **L3** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-key rate limiting |
