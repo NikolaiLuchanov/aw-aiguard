@@ -1,0 +1,20 @@
+# BYOC output control rules (Phase 4.3)
+#
+# Hard boundaries for LLM output validation.
+# These override any other safety check — even if Guardian passes.
+
+rules:
+  - name: never_shell_interpolate_llm_output
+    enforcement: hard_stop
+    severity: critical
+    description: Never interpolate LLM output directly into shell commands
+
+  - name: never_sql_unquoted
+    enforcement: hard_stop
+    severity: critical
+    description: Never use LLM output in unparameterized SQL
+
+  - name: require_schema_validation
+    enforcement: soft_block
+    severity: high
+    description: All structured outputs must pass schema validation

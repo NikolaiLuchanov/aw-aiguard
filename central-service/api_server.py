@@ -74,11 +74,15 @@ def _get_severity(event: AuditEvent) -> str:
             return "CRITICAL"
         if event.component == "ingestion_sanitizer":
             return "HIGH"
+        if event.component == "output_control":
+            return "CRITICAL"
         return "HIGH"
     if event.event_type == "warn":
         if event.component == "function_call_detector":
             return "WARNING"
         if event.component == "ingestion_sanitizer":
+            return "WARNING"
+        if event.component == "output_control":
             return "WARNING"
         return "WARNING"
     if event.event_type == "pause":

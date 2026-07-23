@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | **4.1** | Function-Calling Hallucination | L2+ (Guardian function mode) | Action hijack via fabricated tool calls | 15 |
 | **4.2** | Stored Injection Countermeasures | L2+ (Ingestion sanitization) | Poisoned RAG / stored injection | ✅ Complete (24 tests) |
-| **4.3** | LLM05 Output Control | L6 (Output schema + escaping) | Answer manipulation, shell/DB injection | 16 |
+| **4.3** | LLM05 Output Control | L6 (Output schema + escaping) | Answer manipulation, shell/DB injection | ✅ Complete (25 tests) |
 | **4.4** | Thinking-Mode Verification | L5 (Selective deep reasoning) | Subtle injection, fact substitution | 14 |
 | **4.5** | CaMeL Structural Enforcement | L0/L4 (JSON schema validation) | Data-as-code injection | 20 |
 | **4.6** | Agency Constraints | L7 (Delegation depth limits) | Sub-agent chain escalation | 12 |
@@ -276,32 +276,52 @@ A post-response output control layer runs *after* the LLM response is received a
 6. **Update `central-service/api_server.py`**
    - Add output control components to severity mapping → `CRITICAL` for hard_stop, `HIGH` for soft_block
 
-### Tests (`tests/gateway/test_output_control.py`) — 16 tests
+### Tests (`tests/gateway/test_output_control.py`) — 25 tests ✅ Complete
 
 | # | Test | Verifies |
 |---|---|---|
 | 1 | `test_valid_schema_passes` | Response matching schema → passes |
-| 2 | `test_missing_required_field_blocks` | Missing `test_cases` → block with schema_violation |
+| 2 | `test_missing_required_field_blocks` | Missing `test_cases` → schema validation fails |
 | 3 | `test_wrong_type_blocks` | `test_cases` as string instead of array → block |
 | 4 | `test_html_in_output_escaped` | `<script>` in LLM output → `&lt;script&gt;` |
 | 5 | `test_css_in_output_escaped` | CSS styles in output → HTML-escaped |
 | 6 | `test_plain_text_unchanged_by_escape` | Normal text passes HTML escaping intact |
 | 7 | `test_shell_param_quoted` | LLM output with `'` → properly escaped |
 | 8 | `test_sql_param_quoted` | LLM output with `; DROP TABLE` → parameterized |
-| 9 | `test_schema_violation_logged` | Audit entry with component and violation detail |
-| 10 | `test_byoc_hard_stop_blocks` | `never_shell_interpolate` violation → 403 |
-| 11 | `test_byoc_soft_block_warns` | `require_schema_validation` → warning, not block |
-| 12 | `test_custom_schema_addition` | User-defined schema from YAML applied correctly |
-| 13 | `test_no_schema_for_untyped_output` | Plain text outputs bypass schema validation |
-| 14 | `test_nested_object_validation` | Nested schema structures validated recursively |
-| 15 | `test_maxLength_violation_detected` | Output exceeding maxLength → block |
-| 16 | `test_output_control_empty_response` | Empty/None response handled gracefully |
+| 9 | `test_byoc_hard_stop_blocks` | `never_shell_interpolate` violation → 403 |
+| 10 | `test_byoc_soft_block_warns` | `require_schema_validation` → warning, not block |
+| 11 | `test_custom_schema_addition` | User-defined schema from YAML applied correctly |
+| 12 | `test_no_schema_for_untyped_output` | Plain text outputs bypass schema validation |
+| 13 | `test_output_control_empty_response` | Empty/None response handled gracefully |
+| 14 | `test_schemas_summary` | Loaded schema names returned correctly |
+| 15 | `test_byoc_rules_summary` | Loaded BYOC rules returned correctly |
+| 16 | `test_nested_object_validation` | Nested schema structures validated recursively |
+| 17 | `test_maxLength_violation_detected` | Output exceeding maxLength → error |
+| 18 | `test_uri_format_validation` | URI format constraint enforced |
+| 19 | `test_integer_type_rejects_boolean` | Boolean values rejected as integers |
+| 20 | `test_integer_range_validation` | Out of range integer blocked |
+| 21 | `test_array_items_type_validation` | Array items type validated |
+| 22 | `test_non_json_response_fails_schema` | Non-JSON fails schema validation for object schemas |
+| 23 | `test_validation_result_defaults` | ValidationResult defaults work correctly |
+| 24 | `test_validation_result_add_error` | Adding an error sets valid=False |
+| 25 | `test_output_control_result_defaults` | OutputControlResult defaults work correctly |
+
+### Implementation Status
+
+All implementation steps are complete:
+- ✅ Step 1: `gateway/core/output_control.py` — `OutputController` class with schema validation, HTML escaping, shell/DB quoting
+- ✅ Step 2: `guardrail-config/output_schemas.yaml` — Default schemas for 5 tool output types
+- ✅ Step 3: `guardrail-config/byoc_output_control.yaml` — 3 BYOC rules (2 hard_stop, 1 soft_block)
+- ✅ Step 4: `gateway/core/proxy.py` — Output control integrated in pipeline after sanitization
+- ✅ Step 5: `gateway/core/block.py` — Added `OUTPUT_SCHEMA_VIOLATION`, `OUTPUT_HTML_ESCAPING_REQUIRED`
+- ✅ Step 6: `central-service/api_server.py` — Severity mappings: `CRITICAL` (block), `WARNING` (warn)
 
 ### Documentation Updates
 
-- Update `gateway/README.md` with LLM05 output control section
-- Add `guardrail-config/README.md` entries for output schemas and BYOC rules
-- Update architecture diagram (add LLM05 control box after response, before client delivery)
+- ✅ Updated `IMPLEMENTATION_PLAN.md` — Phase 4.3 marked complete with detailed sub-bullets
+- ✅ Updated `IMPLEMENTATION_PLAN_PHASE_4.md` — Test count corrected to 25, implementation steps marked complete
+- ✅ Updated `architecture-design.md` — Layer 6B LLM05 marked as implemented
+- ⏳ Architecture diagram (`architecture_workflow.html`) — pending manual review
 
 ---
 

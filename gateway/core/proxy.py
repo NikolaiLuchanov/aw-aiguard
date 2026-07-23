@@ -16,6 +16,7 @@ from gateway.core.audit import AuditLogger
 from gateway.core.provenance import Provenance
 from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
 from gateway.core.sanitizer import IngestionSanitizer
+from gateway.core.output_control import OutputController
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +38,7 @@ class LLMProxy:
         byoc: Optional[BYOCEngine] = None,
         detector: Optional[FunctionCallDetector] = None,  # Phase 4.1
         sanitizer: Optional[IngestionSanitizer] = None,    # Phase 4.2
+        output_controller: Optional[OutputController] = None, # Phase 4.3
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -48,6 +50,7 @@ class LLMProxy:
         self.byoc = byoc
         self.detector = detector
         self.sanitizer = sanitizer
+        self.output_controller = output_controller
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -416,6 +419,50 @@ class LLMProxy:
                         status_code=response.status_code,
                         headers=dict(response.headers),
                     )
+
+            # Phase 4.3: LLM05 Output Control — validate/escape response before delivery
+            # Runs after sanitization (4.2), before client delivery
+            if self.output_controller and not is_streaming and not isinstance(response, StreamingResponse):
+                response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+                # Extract tool name from request body for schema lookup
+                tool_name = None
+                if body and isinstance(body, dict):
+                    tool_name = body.get("tool_name") or body.get("function") or body.get("tool")
+                oc_result = self.output_controller.validate_response(response_text, tool_name=tool_name)
+
+                # Replace response content with sanitized/escaped version
+                if oc_result.content != response_text or oc_result.blocked:
+                    if oc_result.blocked:
+                        component_name = "output_control"
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", component_name, prompt,
+                            reason=oc_result.block_reason, blocked_by="output_control",
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                        ) if self.audit_logger else None
+                        return generate_block_response(
+                            reason=BlockReason.OUTPUT_SCHEMA_VIOLATION,
+                            message=oc_result.block_reason,
+                            blocked_by="output_control",
+                        )
+                    else:
+                        # Schema/HTML/shell sanitization applied — update response
+                        response = Response(
+                            content=oc_result.content.encode('utf-8'),
+                            status_code=response.status_code,
+                            headers=dict(response.headers),
+                        )
+                        if oc_result.schema_errors:
+                            await self.audit_logger.log_event(
+                                self.api_key, "warn", "output_control", prompt,
+                                reason=f"Schema validation issues: {'; '.join(oc_result.schema_errors)}",
+                                prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                            ) if self.audit_logger else None
+                        if oc_result.byoc_violations:
+                            await self.audit_logger.log_event(
+                                self.api_key, "warn", "output_control", prompt,
+                                reason=f"BYOC output violations: {'; '.join(oc_result.byoc_violations)}",
+                                prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                            ) if self.audit_logger else None
 
             # Final ALLOW — log that the request passed all checks and was forwarded
             await self.audit_logger.log_event(

@@ -139,8 +139,17 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Sanitization metadata tracked in `Provenance` (`sanitization_applied`, `dangerous_patterns_detected`).
     - `BlockReason.STORED_INJECTION_DETECTED` for critical pattern detection.
     - 24 unit tests in `tests/gateway/test_sanitizer.py`.
-- [ ] **4.3 LLM05 Output Control**
+- [x] **4.3 LLM05 Output Control**
     - Implement output schema validation and HTML/text escaping for all model-generated content before it reaches the user/shell.
+    - `OutputController` (`gateway/core/output_control.py`): three sub-layers — schema validation, HTML escaping, shell/DB parameter quoting.
+    - Schema validation via `jsonschema` Draft 7 against per-tool schemas in `guardrail-config/output_schemas.yaml` (supports type, required, properties, items, maxLength, minimum/maximum, format, pattern).
+    - HTML escaping: `< > & " '` → entity references before rendering in any interface.
+    - Shell/DB quoting: detects command-injection/SQL injection patterns, wraps output in single quotes.
+    - BYOC hard boundaries in `guardrail-config/byoc_output_control.yaml`: `never_shell_interpolate_llm_output` (hard_stop), `never_sql_unquoted` (hard_stop), `require_schema_validation` (soft_block).
+    - `BlockReason.OUTPUT_SCHEMA_VIOLATION`, `BlockReason.OUTPUT_HTML_ESCAPING_REQUIRED` in `gateway/core/block.py`.
+    - Output control integrated into `gateway/core/proxy.py` pipeline after ingestion sanitization, before final response construction.
+    - `central-service/api_server.py`: `output_control` → `CRITICAL` severity (block), `WARNING` (warn).
+    - 25 unit tests in `tests/gateway/test_output_control.py`.
 - [ ] **4.4 Thinking-Mode Verification**
     - Implement the \"Deep Reasoning\" pass (`--think=true`) selectively for high-risk outputs or low-trust provenance.
 - [ ] **4.5 CaMeL Structural Enforcement**
@@ -182,7 +191,7 @@ The Gateway Proxy is designed to be stateless. The switch from local development
 
 ## 🧪 Testing
 
-### Pytest Test Suite — 472 Unit Tests
+### Pytest Test Suite — 497 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
 
@@ -198,6 +207,7 @@ pytest tests/ -v
 | **L0** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
 | **L1** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
 | **L2+** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes, aggressive mode, provenance tracking
+| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement
 | **L2** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies, HTTP 500, timeout, payload shape |
 | **L3** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-key rate limiting |
 | **L4** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry, status endpoint, RequestContext, custom rules |

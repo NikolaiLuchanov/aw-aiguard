@@ -215,18 +215,24 @@ After the main LLM generates a full response and passes the pre-flight guardrail
 - **Thinking mode advantage:** The Guardian model can reason about context, identify subtle injection patterns that evade fast detection, and validate against custom rules specific to your use case. This is the recommended approach for BYOC evaluation where generic safety models are insufficient.
 - **Performance trade-off:** Think mode adds ~2–5x latency vs non-thinking mode (fast). Only apply to high-sensitivity outputs or irreversible tool calls. For standard responses, fast mode pre-flight may be sufficient.
 
-### Layer 6B: OWASP LLM05 — Output Control (New in v1.2)
+### Layer 6B: OWASP LLM05 — Output Control ✅ Implemented (Phase 4.3)
 
 **The gap:** Guardian's pre-flight + post-response checks protect against *harmful intent* injected into the model, but they don't prevent the model from producing *correct-but-wrong output* based on poisoned context. A fact-substituted PR recommendation passes both Guardian gates if Guardian was trained purely on violent/harmful content detection.
 
 **Goal:** Ensure LLM output is treated as untrusted data — never as executable code or trusted control flow — before it reaches the user, shell, browser, DB, or any downstream consumer.
 
-- **Output schema validation:** Validate the structure of LLM responses against expected JSON schemas before passing to consumers. If a `generate_test_plan` call returns plaintext shell commands instead of structured test YAML, block and alert.
-- **HTML/text escaping for rendered output:** Before presenting model-generated content in any interface (CLI, web UI, email), escape HTML entities. Prevents `<script>` or CSS-based injection attacks from the LLM itself.
-- **Shell/DB parameter quoting:** Never interpolate model output directly into SQL queries, shell commands, or API endpoints. Use parameterized queries, proper escaping, and type enforcement.
-- **LLM05-specific BYOC rules:** Add `never_shell_interpolate_llm_output` and `never_sql_unquoted` to the BYOC rule library (Section 6C). These are hard stops even if Guardian passes — structural guardrails against improper data handling.
+- **Output schema validation:** Implemented in `OutputController` (`gateway/core/output_control.py`). Validates LLM responses against JSON schemas via `jsonschema` Draft 7. Supports `type`, `required`, `properties`, `items`, `maxLength`, `minimum`/`maximum`, `format`, `pattern`. Schemas defined in `guardrail-config/output_schemas.yaml` for 5 tool output types.
+- **HTML/text escaping for rendered output:** Before presenting model-generated content in any interface, escapes `< > & " '` entities. Implemented as part of `OutputController`.
+- **Shell/DB parameter quoting:** Detects command-injection/SQL injection patterns in output and wraps in single quotes. Implemented as part of `OutputController`.
+- **LLM05-specific BYOC rules:** `never_shell_interpolate_llm_output` (hard_stop), `never_sql_unquoted` (hard_stop), `require_schema_validation` (soft_block). Defined in `guardrail-config/byoc_output_control.yaml`.
 
-**Why this matters for sub-agent chains:** When Agent A delegates to Agent B, Agent A's output becomes Agent B's context. Unescaped model output from a sub-agent can inject commands into the parent agent's workflow. Output control at every hop prevents injection chain reactions across delegation graphs.
+**Block reasons:** `BlockReason.OUTPUT_SCHEMA_VIOLATION`, `BlockReason.OUTPUT_HTML_ESCAPING_REQUIRED` added to `gateway/core/block.py`.
+
+**Pipeline position:** Runs after ingestion sanitization (Phase 4.2) and before final response delivery in `gateway/core/proxy.py`.
+
+**Severity mapping:** `CRITICAL` (block), `WARNING` (warn) in `central-service/api_server.py`.
+
+**Tests:** 25 unit tests in `tests/gateway/test_output_control.py`.
 
 ---
 

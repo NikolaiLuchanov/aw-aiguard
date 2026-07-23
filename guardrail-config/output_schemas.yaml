@@ -1,0 +1,90 @@
+# Output schemas for LLM05 output control (Phase 4.3)
+#
+# Each key defines a JSON schema that LLM responses must match
+# when generated for that tool/output type.
+#
+# Supported constraints: type, required, properties, items, maxLength,
+#                       minimum, maximum, pattern, format (uri).
+
+schemas:
+  generate_test_plan:
+    type: object
+    required: [test_cases]
+    properties:
+      test_cases:
+        type: array
+        items:
+          type: object
+          required: [name, steps]
+          properties:
+            name:
+              type: string
+              maxLength: 200
+            steps:
+              type: array
+              items:
+                type: string
+                maxLength: 1024
+
+  summarize_code:
+    type: object
+    required: [summary, file_list]
+    properties:
+      summary:
+        type: string
+        maxLength: 2000
+      file_list:
+        type: array
+        items:
+          type: string
+          maxLength: 512
+
+  security_review:
+    type: object
+    required: [findings, risk_level]
+    properties:
+      findings:
+        type: array
+        items:
+          type: object
+          required: [severity, description]
+          properties:
+            severity:
+              type: string
+              enum: [critical, high, medium, low, info]
+            description:
+              type: string
+              maxLength: 4096
+            recommendation:
+              type: string
+              maxLength: 2048
+      risk_level:
+        type: string
+        enum: [critical, high, medium, low]
+
+  code_generation:
+    type: object
+    required: [code, language]
+    properties:
+      code:
+        type: string
+        maxLength: 16384
+      language:
+        type: string
+        maxLength: 64
+
+  file_analysis:
+    type: object
+    required: [file_path, analysis]
+    properties:
+      file_path:
+        type: string
+        format: uri
+        maxLength: 1024
+      analysis:
+        type: string
+        maxLength: 8192
+
+  default:
+    # If no tool-specific schema matches, apply this default
+    type: string  # Any string output is valid by default
