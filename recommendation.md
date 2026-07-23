@@ -115,7 +115,8 @@ Based on the architecture-design1.md v1.1 alignment:
 | **P2** | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
 | **P2** | Centralized config sync (heartbeat + settings poll) | ✅ Phase 3.4 |
 | P2 | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
-| P2 | Data/command separation validation schemas | Planned (Phase 4.5) |
+|| P2 | Data/command separation validation schemas | ✅ Phase 4.5.1 |
+|| P2 | Agency constraints: delegation depth limits, chain integrity | ✅ Phase 4.5.2 |
 
 ### Key Design Decisions Aligned with Architecture
 1. **HITL is the bottleneck you *want*:** The architecture places HITL middleware between pre-flight Guardian and actual tool execution. This intentional friction is by design — slow security > fast catastrophe.

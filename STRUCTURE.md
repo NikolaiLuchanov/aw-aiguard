@@ -40,7 +40,7 @@ aw-aiguard/                          # Project root
 │   ├── hitl_rules.yaml               # Irreversible action patterns with per-rule timeouts
 │   ├── thinking_mode_rules.yaml       # Thinking-mode verification config (thresholds, actions, fail strategy)
 │   ├── byoc_rules.yaml               # BYOC stop-limits (patterns, enforcement, severity)
-│   └── function_call_rules.yaml      # Function-call hallucination detection rules (Phase 4.1)
+│   ├── function_call_rules.yaml      # Function-call hallucination detection rules (Phase 4.1)
 │   ├── tool_schemas.yaml               # CaMeL JSON schemas for tool parameters (Phase 4.5.1)
 │   ├── camel_rules.yaml                # CaMeL enforcement rules (hard_stop) (Phase 4.5.1)
 │   └── agency_rules.yaml               # Delegation depth & agency constraints (Phase 4.5.2)
@@ -128,8 +128,8 @@ aw-aiguard/                          # Project root
 | API Server | `test_api_server.py` | 11 |
 | Audit DB | `test_audit_db.py` + `test_hitl_cloud.py` + `test_dashboard_hitl.py` + `test_hitl_endpoints.py` | 39 |
 | Partition Manager | `test_partition_manager.py` | 10 |
-|| Shared Schemas | `test_schemas.py` | 10 |
-|| CaMeL Validator | `test_schema_validator.py` | 20 |
-|| Agency Controller | `test_agency_controller.py` | 12 |
-|| Phase 4.5 Integration | `test_phase4_integration.py` | 10 |
-|| **Total** | | **569** |
+| Shared Schemas | `test_schemas.py` | 10 |
+| CaMeL Validator | `test_schema_validator.py` | 20 |
+| Agency Controller | `test_agency_controller.py` | 12 |
+| Phase 4.6 Integration | `test_phase4_integration.py` | 10 |
+| **Total** | | **569** |

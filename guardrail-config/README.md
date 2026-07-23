@@ -11,6 +11,12 @@ YAML-based configuration files for all safety layers. Each file is hot-reloadabl
 | `byoc_rules.yaml` | BYOC stop-limits (patterns, enforcement levels, severity) | `BYOCEngine` |
 | `settings.yaml` | Guardian thresholds, safety mode, alert channels, scan sequence | Central Service |
 | `function_call_rules.yaml` | Function-call hallucination detection (trust threshold, fail strategy, tool overrides) | `FunctionCallDetector` |
+| `tool_schemas.yaml` | CaMeL JSON schemas for tool parameters (Draft 7 validation) | `SchemaValidator` |
+| `camel_rules.yaml` | CaMeL enforcement rules (all hard_stop) | `SchemaValidator` |
+| `byoc_output_control.yaml` | Output-specific BYOC rules (LLM05) | `OutputController` |
+| `output_schemas.yaml` | LLM05 output schema definitions | `OutputController` |
+| `thinking_mode_rules.yaml` | Thinking-mode verification thresholds, actions, timeout | `ThinkingModeVerifier` |
+| `agency_rules.yaml` | Sub-agent delegation depth limits, MCP server vetting | `AgencyController` |
 
 ## `function_call_rules.yaml`
 

@@ -161,7 +161,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - `BlockReason.THINKING_MODE_WARNING` in `gateway/core/block.py` (used for audit logging).
     - Severity mapping: `thinking_mode_verifier` → `CRITICAL` (block), `WARNING` (warn) in `central-service/api_server.py`.
     - 23 unit tests in `tests/gateway/test_thinking_mode.py`.
-||- [x] **4.5 CaMeL Structural Enforcement** ✅
+|- [x] **4.5 CaMeL Structural Enforcement** ✅
     - Implement JSON schema validation for all tool-call parameters to prevent "data-as-code" injections.
     - `SchemaValidator` (`gateway/core/schema_validator.py`): validates tool-call parameters against predefined JSON schemas (Draft 7) before they reach the target API or system command.
     - Covers 6 tools: `terminal`, `browser_navigate`, `delegate_task`, `web_search`, `file_read`, `email_send` with per-tool schemas in `guardrail-config/tool_schemas.yaml`.
@@ -171,7 +171,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Integrated into `gateway/core/proxy.py` pipeline between Function-Call Detector and BYOC.
     - `central-service/api_server.py`: `schema_validator` → `CRITICAL` severity.
     - 20 unit tests in `tests/gateway/test_schema_validator.py` covering validation, config, hot-reload.
-- [x] **4.6 Agency Constraints** ✅
+|- [x] **4.6 Agency Constraints** ✅
     - Implement max-hop depth limits for sub-agent delegation chains to prevent recursive injection attacks.
     - `AgencyController` (`gateway/core/agency_controller.py`): enforces delegation depth limits, chain continuity validation, MCP server vetting (allowlist/blocklist), and action-level approval requirements.
     - Configured via `guardrail-config/agency_rules.yaml`: `max_delegation_depth` (default 3), `allowlist` tools, `require_approval_for` tools, `mcp_server_vetting` with mode/allowlist/blocklist.
@@ -180,6 +180,12 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Integrated into `gateway/core/proxy.py` pipeline between BYOC and HITL.
     - `central-service/api_server.py`: `agency_controller` → `HIGH` severity.
     - 12 unit tests in `tests/gateway/test_agency_controller.py` covering depth checks, chain integrity, allowlist, approval, MCP vetting.
+    - 10 integration tests in `tests/gateway/test_phase4_integration.py` covering delegation depth enforcement, approval requirements, chain broken detection, and deep delegation paths.
+    - `gateway/README.md`: Added agency constraints documentation section.
+    - `guardrail-config/README.md`: Added `agency_rules.yaml` entry with field reference.
+    - `architecture_workflow.html`: Added Agency Controller node (P5) to Mermaid diagram with purple styling.
+    - `architecture-design.md`: Section 7D added — "Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)".
+    - Phase 4.6 documentation & verification completed 2026-07-23.
 
 ### Phase 5: Validation & Finalization
 *Goal: Stress test the architecture against adversarial attacks and prepare for production.*

@@ -143,6 +143,29 @@ The BYOC (Bring Your Own Criteria) engine codifies "never do this" rules as hard
 - **Header Integrity**: Strips client-side `Authorization` headers and injects the secure proxy key.
 - **Reliability**: 600s timeouts for long LLM generations and connection pooling to prevent resource leaks.
 
+### CaMeL JSON Schema Validation (Phase 4.5.1)
+Tool-call parameters are validated against JSON schemas (Draft 7) before reaching any target API or system command. This implements the CaMeL structural enforcement principle — data must not influence control flow.
+
+- `SchemaValidator` (`gateway/core/schema_validator.py`) loads schemas from `guardrail-config/tool_schemas.yaml`
+- Covers 6 tools: `terminal`, `browser_navigate`, `delegate_task`, `web_search`, `file_read`, `email_send`
+- Schema constraints: `type`, `required`, `properties`, `items`, `maxLength`, `minimum`/`maximum`, `format`, `pattern`
+- CaMeL enforcement rules in `guardrail-config/camel_rules.yaml` (all `hard_stop`)
+- Hot-reload: `reload_schemas()` and `reload_rules()` for live updates
+- Blocked requests return `403` with `BlockReason.SCHEMA_VALIDATION_FAILED`
+
+### Agency Constraints — Delegation Depth Limits & Chain Integrity (Phase 4.5.2)
+Prevents recursive injection through sub-agent delegation chains by enforcing max-hop depth limits and validating chain continuity.
+
+- `AgencyController` (`gateway/core/agency_controller.py`) enforces four checks on every delegation:
+  1. **Depth limit**: `hop_depth < max_delegation_depth` (default: 3 hops)
+  2. **Chain continuity**: No gaps in `source_chain` hop_index values
+  3. **Tool-level approval**: Certain tools (`file_write`, `shell_execute`, `email_send`, `commit`, `deploy`) require explicit HITL approval
+  4. **MCP server vetting**: Allowlist/blocklist enforcement for external MCP servers
+- Configuration: `guardrail-config/agency_rules.yaml`
+- Three new block reasons: `AGENCY_DEPTH_EXCEEDED`, `AGENCY_CHAIN_BROKEN`, `AGENCY_APPROVAL_REQUIRED`
+- Pipeline position: Between BYOC (L3) and HITL (L4)
+- Hot-reload: `reload_rules()` for live rule updates
+
 ### Block Response Schema (Phase 1.6)
 When the proxy intercepts and blocks a request, it returns a standardized `403 Forbidden` JSON response:
 
