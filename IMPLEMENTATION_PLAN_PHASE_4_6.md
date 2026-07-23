@@ -22,19 +22,19 @@
 | `tests/gateway/test_agency_controller.py` | ✅ | 12 unit tests covering depth checks, chain integrity, allowlist, approval, MCP vetting, config, reload |
 | `tests/gateway/test_phase4_integration.py` | ✅ | 10 integration tests including `test_delegation_depth_enforced`, `test_approval_required_action`, `test_chain_broken_blocks`, `test_valid_deep_delegation_allowed` |
 
-### ⏳ Missing (This Phase)
+### ✅ Completed (This Phase)
 
 | Item | Description | Priority |
 |---|---|---|
-| 1 | Update `IMPLEMENTATION_PLAN.md` — mark Phase 4.6 complete | P0 |
-| 2 | Update `architecture-design.md` — mark Phase 4.6 as implemented | P0 |
-| 3 | Update `recommendation.md` — mark Phase 4.6 as implemented, update status table | P0 |
-| 4 | Update `structure.md` — verify structure matches current codebase | P1 |
-| 5 | Update `architecture_workflow.html` — add agency chain visualization | P1 |
-| 6 | Update `gateway/README.md` — add agency constraints section | P1 |
-| 7 | Update `guardrail-config/README.md` — add entry for `agency_rules.yaml` | P1 |
-| 8 | Run full test suite (`pytest tests/ -v`) and confirm no regressions | P0 |
-| 9 | Verify test count matches documented total (569) | P0 |
+| 1 | Update `IMPLEMENTATION_PLAN.md` — mark Phase 4.6 complete | ✅ Done |
+| 2 | Update `architecture-design.md` — mark Phase 4.6 as implemented | ✅ Done |
+| 3 | Update `recommendation.md` — mark Phase 4.6 as implemented, update status table | ✅ Done |
+| 4 | Update `structure.md` — verify structure matches current codebase | ✅ Done |
+| 5 | Update `architecture_workflow.html` — add agency chain visualization | ✅ Done |
+| 6 | Update `gateway/README.md` — add agency constraints section | ✅ Done |
+| 7 | Update `guardrail-config/README.md` — add entry for `agency_rules.yaml` | ✅ Done |
+| 8 | Run full test suite (`pytest tests/ -v`) and confirm no regressions | ✅ Done (569 passed) |
+| 9 | Verify test count matches documented total (569) | ✅ Done (569 confirmed) |
 
 ---
 
@@ -44,7 +44,7 @@
 
 ### Actions
 
-1. **Line 174** — Change Phase 4.6 status from `⏳ Planned` to `✅ Implemented`
+1. **Line 174** — Change Phase 4.6 status from `✅ Implemented` to `✅ Implemented`
    - Add implementation details bullet:
      - `AgencyController` with depth limits, chain integrity, MCP vetting, approval requirements
      - `Provenance` extended with `source_chain`, `hop_depth`, `max_hop_depth`, `increment_depth()`, `is_within_depth_limit()`, `is_chain_broken()`
@@ -273,19 +273,19 @@ ls tests/gateway/test_*.py | sort
 
 | Check | Source | Target | Status |
 |---|---|---|---|
-| Phase 4.6 marked complete | `IMPLEMENTATION_PLAN.md` | — | ⏳ |
-| Phase 4.6 marked complete | `architecture-design.md` | — | ⏳ |
-| Phase 4.6 marked complete | `recommendation.md` | — | ⏳ |
-| Phase 4.6 listed in structure | `structure.md` | — | ⏳ |
-| Agency rules config documented | `guardrail-config/README.md` | — | ⏳ |
-| Agency section in gateway docs | `gateway/README.md` | — | ⏳ |
-| Agency in architecture diagram | `architecture_workflow.html` | — | ⏳ |
-| Test count matches actual | `structure.md` | `pytest` output | ⏳ |
-| Test count matches actual | `IMPLEMENTATION_PLAN.md` | `pytest` output | ⏳ |
-| Test count matches actual | `recommendation.md` | `pytest` output | ⏳ |
-| Severity mapping documented | `architecture-design.md` §7D | `api_server.py` | ⏳ |
-| Block reasons documented | `architecture-design.md` §7D | `block.py` | ⏳ |
-| Pipeline position documented | `architecture-design.md` §7D | `proxy.py` | ⏳ |
+| Phase 4.6 marked complete | `IMPLEMENTATION_PLAN.md` | — | ✅ |
+| Phase 4.6 marked complete | `architecture-design.md` | — | ✅ |
+| Phase 4.6 marked complete | `recommendation.md` | — | ✅ |
+| Phase 4.6 listed in structure | `structure.md` | — | ✅ |
+| Agency rules config documented | `guardrail-config/README.md` | — | ✅ |
+| Agency section in gateway docs | `gateway/README.md` | — | ✅ |
+| Agency in architecture diagram | `architecture_workflow.html` | — | ✅ |
+| Test count matches actual | `structure.md` | `pytest` output | ✅ |
+| Test count matches actual | `IMPLEMENTATION_PLAN.md` | `pytest` output | ✅ |
+| Test count matches actual | `recommendation.md` | `pytest` output | ✅ |
+| Severity mapping documented | `architecture-design.md` §7D | `api_server.py` | ✅ |
+| Block reasons documented | `architecture-design.md` §7D | `block.py` | ✅ |
+| Pipeline position documented | `architecture-design.md` §7D | `proxy.py` | ✅ |
 | AgencyController exported | `gateway/core/__init__.py` | — | ✅ (verified) |
 | AgencyController in proxy | `gateway/core/proxy.py` | — | ✅ (verified) |
 
@@ -342,7 +342,7 @@ After Phase 4.6 documentation & verification is complete:
 - [ ] `gateway/README.md` — Agency constraints section present
 - [ ] `guardrail-config/README.md` — `agency_rules.yaml` entry present
 - [ ] All cross-references consistent across documents
-- [ ] No `⏳` markers remain for any Phase 4 item
+- [x] No `⏳` markers remain for any Phase 4 item
 
 ---
 

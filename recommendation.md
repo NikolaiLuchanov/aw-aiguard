@@ -95,6 +95,7 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 ||| Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
 |||| PII/Secrets scanning | Regex + entropy scoring (via `asyncio.to_thread()`) | Sequential in pipeline (Sequence A/B/C) | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
 ||| CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
+||| **L7: Agency constraints** | Delegation depth + chain integrity | Pre-forward on delegation | Prevent recursive injection through sub-agent chains |
 ||| **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
 
 ---
@@ -116,7 +117,7 @@ Based on the architecture-design1.md v1.1 alignment:
 | **P2** | Centralized config sync (heartbeat + settings poll) | ✅ Phase 3.4 |
 | P2 | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
 || P2 | Data/command separation validation schemas | ✅ Phase 4.5.1 |
-|| P2 | Agency constraints: delegation depth limits, chain integrity | ✅ Phase 4.5.2 |
+|| P2 | Agency constraints: delegation depth limits, chain integrity | ✅ Phase 4.6 |
 
 ### Key Design Decisions Aligned with Architecture
 1. **HITL is the bottleneck you *want*:** The architecture places HITL middleware between pre-flight Guardian and actual tool execution. This intentional friction is by design — slow security > fast catastrophe.

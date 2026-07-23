@@ -1,5 +1,5 @@
 # aw-aiguard: Central Guardrail & Audit Service Architecture
-**Date:** 2026-07-23 | **Status:** Design Draft v1.3 (Updated: HITL gates, provenance tagging, stop-limits, data/command separation, LLM05 output validation, excessive agency safeguards, stored injection countermeasures, CaMeL structural enforcement, agency constraints)
+**Date:** 2026-07-23 | **Status:** Design Draft v1.4 (Phase 4.6 Agency Constraints complete — all documentation verified)
 
 ---
 
@@ -235,6 +235,44 @@ After the main LLM generates a full response and passes the pre-flight guardrail
 **Tests:** 25 unit tests in `tests/gateway/test_output_control.py`.
 
 ---
+
+### Layer 7: Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)
+
+**Goal:** *Prevent recursive injection through sub-agent delegation chains by enforcing max-hop depth limits and chain integrity validation.*
+
+**Implementation:** `AgencyController` (`gateway/core/agency_controller.py`) — enforces:
+- Max delegation depth (default 3 hops)
+- Chain continuity validation (detects missing hops in `source_chain`)
+- Tool-level approval requirements (`file_write`, `shell_execute`, `email_send`, `commit`, `deploy`)
+- MCP server vetting (allowlist/blocklist)
+
+**Provenance extensions:**
+- `source_chain: list[dict]` — carries every intermediate hop: `[{source_id, source_type, trust_level, hop_index}, ...]`
+- `hop_depth: int` — current depth in the delegation chain
+- `max_hop_depth: int` — configured maximum (default 3)
+- `increment_depth()` — called on each delegation
+- `is_within_depth_limit() -> bool` — checks `hop_depth < max_hop_depth`
+- `is_chain_broken() -> bool` — detects gaps in `source_chain` hop_index values
+
+**Block reasons:** `AGENCY_DEPTH_EXCEEDED`, `AGENCY_CHAIN_BROKEN`, `AGENCY_APPROVAL_REQUIRED`
+
+**Pipeline position:** Between BYOC (L3) and HITL (L4). Runs on every delegation/tool-invocation.
+
+**Severity mapping:** `agency_controller` → `HIGH` (depth exceeded, chain broken), `WARNING` (approval required)
+
+**Configuration:** `guardrail-config/agency_rules.yaml`
+- `max_delegation_depth` (int, default: 3)
+- `allowlist` (list) — tools that bypass approval requirements
+- `require_approval_for` (list) — tools requiring explicit HITL approval
+- `mcp_server_vetting` — mode (`allowlist`/`blocklist`), allowlist, blocklist
+
+**Tests:** 12 unit tests in `test_agency_controller.py`, 10 integration tests in `test_phase4_integration.py`.
+
+**Hot-reload:** `AgencyController.reload_rules()` supports live rule updates without restart.
+
+**Architecture diagram:** Agency Controller (P5) added to Mermaid workflow diagram with purple styling (#7b1fa2).
+
+
 
 ## 5. Provenance Tagging & Data Schema Requirements (Updated in v1.2)
 
