@@ -17,6 +17,7 @@ from gateway.core.provenance import Provenance
 from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
 from gateway.core.sanitizer import IngestionSanitizer
 from gateway.core.output_control import OutputController
+from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,7 @@ class LLMProxy:
         detector: Optional[FunctionCallDetector] = None,  # Phase 4.1
         sanitizer: Optional[IngestionSanitizer] = None,    # Phase 4.2
         output_controller: Optional[OutputController] = None, # Phase 4.3
+        thinking_verifier: Optional[ThinkingModeVerifier] = None,  # Phase 4.4
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -51,6 +53,7 @@ class LLMProxy:
         self.detector = detector
         self.sanitizer = sanitizer
         self.output_controller = output_controller
+        self.thinking_verifier = thinking_verifier  # Phase 4.4
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -419,6 +422,52 @@ class LLMProxy:
                         status_code=response.status_code,
                         headers=dict(response.headers),
                     )
+
+            # Phase 4.4: Thinking-Mode Verification (NEW)
+            # Runs after sanitization (4.2), before output control (4.3).
+            # Advisory only: "no" triggers a WARNING alert but does NOT block delivery.
+            if self.thinking_verifier and not is_streaming and not isinstance(response, StreamingResponse):
+                # Determine action type from request body for should_run()
+                action_type = ""
+                if body and isinstance(body, dict):
+                    action_type = (
+                        body.get("action_type")
+                        or body.get("tool_name")
+                        or body.get("function")
+                        or ""
+                    )
+
+                if self.thinking_verifier.should_run(provenance, action_type):
+                    response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+
+                    tm_decision, tm_message = await self.thinking_verifier.verify(response_text)
+
+                    if tm_decision == SafetyDecision.BLOCK:
+                        # Thinking mode flagged harmful content — log as critical
+                        # Per advisory design: still deliver response but alert
+                        await self.audit_logger.log_event(
+                            self.api_key, "block", "thinking_mode_verifier", prompt,
+                            reason=tm_message, blocked_by="thinking_mode_verifier",
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                        ) if self.audit_logger else None
+                        logger.warning("Thinking-mode block: delivering response with WARNING alert.")
+                        component_name = "thinking_mode_verifier"  # Override for final log
+
+                    elif tm_decision == SafetyDecision.WARNING:
+                        # Timeout or error — follow fail_strategy
+                        await self.audit_logger.log_event(
+                            self.api_key, "warn", "thinking_mode_verifier", prompt,
+                            reason=tm_message,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                        ) if self.audit_logger else None
+
+                    elif self.thinking_verifier.config.log_all:
+                        # Successful check with log_all enabled
+                        await self.audit_logger.log_event(
+                            self.api_key, "allow", "thinking_mode_verifier", prompt,
+                            reason=tm_message,
+                            prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                        ) if self.audit_logger else None
 
             # Phase 4.3: LLM05 Output Control — validate/escape response before delivery
             # Runs after sanitization (4.2), before client delivery

@@ -2,7 +2,7 @@ from enum import Enum
 import logging
 import httpx
 import asyncio
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,21 +20,32 @@ class GuardianGuard:
         self.url = url
         self.model = model
         self.fail_strategy = fail_strategy.lower()
-        self.timeout = httpx.Timeout(2.0)
+        self.timeout = httpx.Timeout(2.0)        # fast mode
+        self.thinking_timeout = httpx.Timeout(30.0)  # thinking mode (Phase 4.4)
 
-    async def check_safety(self, prompt: str) -> SafetyDecision:
+    async def check_safety(self, prompt: str, think: bool = False) -> SafetyDecision:
         """
         Performs a pre-flight safety check.
-        Returns a SafetyDecision based on the model score or the fail-safe strategy.
+
+        Args:
+            prompt: Text to evaluate.
+            think: If True, runs Guardian in thinking mode (deeper reasoning, higher latency).
+
+        Returns:
+            SafetyDecision based on the model score or the fail-safe strategy.
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            timeout = self.thinking_timeout if think else self.timeout
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                payload: Dict[str, object] = {
+                    "prompt": prompt,
+                    "model": self.model,
+                }
+                if think:
+                    payload["think"] = True  # Phase 4.4: thinking mode flag
                 response = await client.post(
                     self.url,
-                    json={
-                        "prompt": prompt,
-                        "model": self.model
-                    }
+                    json=payload
                 )
                 
                 if response.status_code == 200:

@@ -14,6 +14,7 @@ from gateway.core.scanner import PIIScanner
 from gateway.core.hitl import HITLGate
 from gateway.core.byoc import BYOCEngine
 from gateway.core.audit import AuditLogger
+from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,13 @@ audit_logger = AuditLogger(
     buffer_path=AUDIT_BUFFER_PATH,
 )
 
+# Phase 4.4: Initialize the Thinking-Mode Verifier
+THINKING_MODE_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "thinking_mode_rules.yaml"
+)
+thinking_config = ThinkingModeConfig.from_yaml(THINKING_MODE_RULES_PATH)
+thinking_verifier = ThinkingModeVerifier(guardian=guardian, config=thinking_config)
+
 # Initialize the Proxy Engine with all security components
 proxy_engine = LLMProxy(
     target_url=TARGET_URL, 
@@ -112,6 +120,7 @@ proxy_engine = LLMProxy(
     scanner=scanner,
     hitl=hitl,
     byoc=byoc,
+    thinking_verifier=thinking_verifier,  # Phase 4.4
     audit_logger=audit_logger,
     scan_sequence=SCAN_SEQUENCE
 )

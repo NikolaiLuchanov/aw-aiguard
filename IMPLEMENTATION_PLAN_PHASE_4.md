@@ -410,10 +410,23 @@ The thinking-mode verification runs *after* the LLM response is received, in the
 
 ### Documentation Updates
 
-- Update `gateway/README.md` with thinking-mode section
-- Add `guardrail-config/README.md` entry for `thinking_mode_rules.yaml`
-- Update architecture diagram (add thinking-mode box in post-flight layer)
-- Update `IMPLEMENTATION_PLAN.md` with Phase 4.4 status
+- ✅ Update `gateway/README.md` with thinking-mode section
+- ✅ Add `guardrail-config/README.md` entry for `thinking_mode_rules.yaml`
+- ✅ Update architecture diagram (add thinking-mode box in post-flight layer)
+- ✅ Update `IMPLEMENTATION_PLAN.md` with Phase 4.4 status
+
+### Implementation Status
+
+All implementation steps are complete:
+- ✅ Step 1: `GatewayGuard.check_safety(think: bool)` extended with `think` parameter, `thinking_timeout` attribute
+- ✅ Step 2: `guardrail-config/thinking_mode_rules.yaml` — configurable thresholds, actions, timeout, fail strategy
+- ✅ Step 3: `gateway/core/thinking_mode.py` — `ThinkingModeVerifier` + `ThinkingModeConfig` classes, decision matrix
+- ✅ Step 4: `gateway/core/proxy.py` — thinking-mode check integrated between sanitization and output control
+- ✅ Step 5: `gateway/core/block.py` — `THINKING_MODE_WARNING` added to `BlockReason`
+- ✅ Step 6: `central-service/api_server.py` — severity mapping: `CRITICAL` (block), `WARNING` (warn)
+- ✅ Step 7: `gateway/main.py` — `ThinkingModeVerifier` wired up as dependency
+- ✅ Step 8: `gateway/core/__init__.py` — `ThinkingModeVerifier`, `ThinkingModeConfig` exported
+- ✅ 23 unit tests in `tests/gateway/test_thinking_mode.py`
 
 ---
 

@@ -13,6 +13,8 @@ aw-aiguard/                          # Project root
 │   │   ├── block.py                 # Standardized 403 block response generator
 │   │   ├── function_call_detector.py # Function-call hallucination detection (Phase 4.1)
 │   │   ├── sanitizer.py              # Ingestion sanitization for stored injection (Phase 4.2)
+│   │   ├── thinking_mode.py          # Thinking-mode verification for post-response Guardian check (Phase 4.4)
+│   │   ├── output_control.py         # LLM05 output control: schema validation, HTML escaping (Phase 4.3)
 │   │   ├── provenance.py            # Provenance dataclass: extraction, serialization, trust-level checks, sanitization tracking
 │   │   └── audit.py                 # Async audit logger (queue → backend, JSONL fallback)
 │   ├── main.py                      # FastAPI server entry point
@@ -34,7 +36,8 @@ aw-aiguard/                          # Project root
 │   ├── scan_rules.yaml               # PII/Secrets detection rules (block, redact, warn, ignore)
 │   ├── settings.yaml                 # Guardian thresholds, safety mode, alert channels
 │   ├── hitl_rules.yaml               # Irreversible action patterns with per-rule timeouts
-│   ├── byoc_rules.yaml               # Structured BYOC stop-limits (patterns, enforcement, severity)
+│   ├── thinking_mode_rules.yaml       # Thinking-mode verification config (thresholds, actions, fail strategy)
+│   ├── byoc_rules.yaml               # BYOC stop-limits (patterns, enforcement, severity)
 │   └── function_call_rules.yaml      # Function-call hallucination detection rules (Phase 4.1)
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
@@ -54,6 +57,9 @@ aw-aiguard/                          # Project root
 │   │   ├── test_proxy_provenance.py  # Proxy pipeline provenance integration
 │   │   ├── test_proxy_hitl_cloud.py  # Proxy HITL cloud provenance passing
 │   │   └── test_function_call_detector.py # Function-call hallucination detection (Phase 4.1)
+│   │   ├── test_sanitizer.py          # IngestionSanitizer: 12 patterns, action modes (Phase 4.2)
+│   │   ├── test_output_control.py     # Output schema validation, HTML escaping, shell/DB quoting (Phase 4.3)
+│   │   └── test_thinking_mode.py      # Thinking-mode verification: decision matrix, Guardian integration (Phase 4.4)
 │   ├── central_service/              # Central service tests
 │   │   ├── test_alert_engine.py      # Telegram/Slack/Email dispatch, severity mapping
 │   │   ├── test_api_server.py        # Severity mapping, settings YAML loading, HITL endpoints
@@ -89,8 +95,9 @@ aw-aiguard/                          # Project root
 | **L2** | `guardrail.py` | Guardian pre-flight safety gate (real-time scoring) |
 | **L3** | `function_call_detector.py` | Function-call hallucination detection (Phase 4.1) |
 | **L4** | `byoc.py` | BYOC stop-limits: hard boundaries, organizational policy |
-| **L5** | `hitl.py` | Human-in-the-loop: pause for irreversible actions |
-| **L6** | *(post-response)* | Thinking-mode Guardian verification for high-risk outputs |
+|| **L4** | `hitl.py` | Human-in-the-loop: pause for irreversible actions |
+|| **L5** | `thinking_mode.py` | Thinking-mode Guardian verification for low-trust/high-risk outputs (Phase 4.4) |
+|| **L6** | *(post-response)* | Thinking-mode Guardian verification for high-risk outputs |
 | **L6B** | *(post-response)* | OWASP LLM05 output control: schema validation, escaping |
 
 ## Test Count by Module
@@ -112,4 +119,4 @@ aw-aiguard/                          # Project root
 | Audit DB | `test_audit_db.py` + `test_hitl_cloud.py` + `test_dashboard_hitl.py` + `test_hitl_endpoints.py` | 39 |
 | Partition Manager | `test_partition_manager.py` | 10 |
 | Shared Schemas | `test_schemas.py` | 10 |
-|| **Total** | | **472** |
+|| **Total** | | **520** |

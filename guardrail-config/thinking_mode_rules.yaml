@@ -1,0 +1,25 @@
+# Thinking-Mode Verification Rules
+# Controls when selective deep-reasoning Guardian checks are triggered.
+
+# Trust level thresholds
+low_trust_threshold: 0.5        # Below this → mandatory thinking mode
+low_trust_stricter_threshold: 0.3  # Below this → thinking mode + additional logging
+
+# Actions that always trigger thinking mode (regardless of trust level)
+mandatory_actions:
+  - "delete"
+  - "send_email"
+  - "commit"
+  - "deploy"
+  - "execute_shell"
+
+# Timeout for thinking-mode Guardian API call (seconds)
+timeout_seconds: 30
+
+# What to do when thinking mode times out or returns HTTP 500
+# "warn" = allow response, log warning, send alert (recommended — thinking is supplemental)
+# "block" = block the response (strict — may cause false-positive denials)
+fail_strategy: "warn"
+
+# Whether to log all thinking-mode invocations (even successful ones)
+log_all: true

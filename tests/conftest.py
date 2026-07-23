@@ -9,9 +9,14 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+
+from gateway.core.guardrail import SafetyDecision
+from gateway.core.provenance import Provenance
+from gateway.core.thinking_mode import ThinkingModeConfig, ThinkingModeVerifier
 
 # ------------------------------------------------------------------ #
 # Ensure project root is on sys.path for module imports
@@ -282,3 +287,36 @@ def mock_guardian_response_error():
     mock_response.status_code = 500
     mock_response.json.return_value = {"error": "internal"}
     return mock_response
+
+
+@pytest.fixture
+def thinking_config():
+    """Default thinking-mode configuration."""
+    return ThinkingModeConfig(
+        low_trust_threshold=0.5,
+        low_trust_stricter_threshold=0.3,
+        mandatory_actions=frozenset({"delete", "send_email", "commit", "deploy"}),
+        timeout_seconds=30,
+        fail_strategy="warn",
+    )
+
+
+@pytest.fixture
+def thinking_verifier(thinking_config):
+    """ThinkingModeVerifier with mocked Guardian."""
+    mock_guardian = MagicMock()
+    mock_guardian.check_safety = AsyncMock(return_value=SafetyDecision.ALLOW)
+    mock_guardian.thinking_timeout = httpx.Timeout(30.0)
+    return ThinkingModeVerifier(mock_guardian, thinking_config)
+
+
+@pytest.fixture
+def low_trust_provenance():
+    """Provenance with trust_level below the low-trust threshold."""
+    return Provenance(source_id="web-page-1", source_type="external_api", trust_level=0.3)
+
+
+@pytest.fixture
+def high_trust_provenance():
+    """Provenance with trust_level above the low-trust threshold."""
+    return Provenance(source_id="git-repo-1", source_type="repository", trust_level=0.95)

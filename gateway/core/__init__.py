@@ -1,3 +1,4 @@
 from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
 from gateway.core.sanitizer import IngestionSanitizer, SanitizationResult
 from gateway.core.output_control import OutputController, OutputControlResult, ValidationResult
+from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
