@@ -47,8 +47,19 @@ aw-aiguard/                          # Project root
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 569 pytest unit tests
+├── tests/                            # 654 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
+│   ├── red_team/                     # 85 adversarial test cases (Phase 5.1)
+│   │   ├── test_direct_injection.py  # 14 tests: jailbreak, exfiltration, action hijack, PII
+│   │   ├── test_indirect_injection.py # 14 tests: web, RAG, GitHub, email, PDF, stored injection
+│   │   ├── test_masking_techniques.py # 11 tests: CSS, Unicode, encoding, attribute masking
+│   │   ├── test_exfiltration.py      # 8 tests: simple, covert, staged, multi-hop exfil
+│   │   ├── test_action_hijack.py     # 7 tests: commit, delete, deploy, email, shell, branch
+│   │   ├── test_quiet_commands.py    # 6 tests: "don't tell user", skip confirmation, act silently
+│   │   ├── test_answer_manipulation.py # 5 tests: fact substitution, source manipulation
+│   │   ├── test_lethal_trifecta.py   # 5 tests: full trifecta, broken trifecta variants
+│   │   ├── test_delegation_chains.py # 5 tests: depth limit, chain broken, approval, MCP vetting
+│   │   └── test_integration_pipeline.py # 6 tests: full pipeline, performance baseline
 │   ├── gateway/                      # Gateway layer tests
 │   │   ├── test_guardrail.py         # GuardianGuard: allow/block/warn/fail-strategies
 │   │   ├── test_scanner.py           # PIIScanner: AWS keys, private keys, email redaction
@@ -61,7 +72,7 @@ aw-aiguard/                          # Project root
 │   │   ├── test_provenance.py        # Provenance: from_headers, from_dict, is_low_trust
 │   │   ├── test_proxy_provenance.py  # Proxy pipeline provenance integration
 │   │   ├── test_proxy_hitl_cloud.py  # Proxy HITL cloud provenance passing
-│   │   └── test_function_call_detector.py # Function-call hallucination detection (Phase 4.1)
+│   │   ├── test_function_call_detector.py # Function-call hallucination detection (Phase 4.1)
 │   │   ├── test_sanitizer.py          # IngestionSanitizer: 12 patterns, action modes (Phase 4.2)
 │   │   ├── test_output_control.py     # Output schema validation, HTML escaping, shell/DB quoting (Phase 4.3)
 │   │   ├── test_thinking_mode.py      # Thinking-mode verification: decision matrix, Guardian integration (Phase 4.4)
@@ -132,4 +143,5 @@ aw-aiguard/                          # Project root
 | CaMeL Validator | `test_schema_validator.py` | 20 |
 | Agency Controller | `test_agency_controller.py` | 12 |
 | Phase 4.6 Integration | `test_phase4_integration.py` | 10 |
-| **Total** | | **569** |
+| Red-Team (Phase 5.1) | 10 test files | 85 |
+| **Total** | | **654** |
