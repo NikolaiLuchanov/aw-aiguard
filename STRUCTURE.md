@@ -12,7 +12,8 @@ aw-aiguard/                          # Project root
 │   │   ├── byoc.py                  # BYOC stop-limits enforcement engine (hard_stop, soft_block)
 │   │   ├── block.py                 # Standardized 403 block response generator
 │   │   ├── function_call_detector.py # Function-call hallucination detection (Phase 4.1)
-│   │   ├── provenance.py            # Provenance dataclass: extraction, serialization, trust-level checks
+│   │   ├── sanitizer.py              # Ingestion sanitization for stored injection (Phase 4.2)
+│   │   ├── provenance.py            # Provenance dataclass: extraction, serialization, trust-level checks, sanitization tracking
 │   │   └── audit.py                 # Async audit logger (queue → backend, JSONL fallback)
 │   ├── main.py                      # FastAPI server entry point
 │   ├── middleware/                   # Additional HTTP middleware
@@ -38,7 +39,7 @@ aw-aiguard/                          # Project root
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 448 pytest unit tests
+├── tests/                            # 472 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
 │   ├── gateway/                      # Gateway layer tests
 │   │   ├── test_guardrail.py         # GuardianGuard: allow/block/warn/fail-strategies
@@ -99,6 +100,7 @@ aw-aiguard/                          # Project root
 | Provenance | `test_provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 23 |
 | PII Scanner | `test_scanner.py` | 14 |
 | Guardian | `test_guardrail.py` | 12 |
+| Ingestion Sanitizer | `test_sanitizer.py` | 24 |
 | Function-Call Detector | `test_function_call_detector.py` | 17 |
 | BYOC | `test_byoc.py` | 19 |
 | HITL | `test_hitl.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 38 |
@@ -110,4 +112,4 @@ aw-aiguard/                          # Project root
 | Audit DB | `test_audit_db.py` + `test_hitl_cloud.py` + `test_dashboard_hitl.py` + `test_hitl_endpoints.py` | 39 |
 | Partition Manager | `test_partition_manager.py` | 10 |
 | Shared Schemas | `test_schemas.py` | 10 |
-| **Total** | | **448** |
+|| **Total** | | **472** |

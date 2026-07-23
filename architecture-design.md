@@ -310,15 +310,21 @@ If Agent A delegates to Agent B which delegates to Agent C, each hop creates a n
 
 **Actionable guidance:** Segment agents by autonomy level. A read-only code-review agent should lose no more than read permissions if compromised. This is why your BYOC rules, HITL gates, and least-privilege scoping are critical: they *reduce* the agent's effective autonomy without removing useful functionality.
 
-### 7C. Stored Injection — Poisoned RAG Data 
+### 7C. Stored Injection — Poisoned RAG Data ✅ Implemented (Phase 4.2)
 
 Summary defines stored injection as data that *"settles in the agent's memory, a RAG database or training data and triggers later."* Your outbound-secrets scanner (Section 8) protects against exfiltration of secrets the agent *already has*, but does not protect against poisoning your RAG store at ingestion time.
 
 **Scenario:** An attacker injects malicious content into internal documentation or code comments. Later, an agent fetches that content. The injection fires — if the agent lacks HITL on writes, it could modify documents *as if* they were legitimate instructions.
 
-**Countermeasures:**
-- Treat ingested data (RAG docs, fetched web pages, scraped GitHub) as potentially poisoned at ingestion time. Strip executable context (HTML scripts, zero-width chars) before storing in RAG.
+**Countermeasures — implemented:**
+- `IngestionSanitizer` (`gateway/core/sanitizer.py`) runs regex-based sanitization on all ingested content before it enters the context window or RAG store.
+- Patterns: script tags, zero-width Unicode characters, CSS-hiding patterns, injection-bearing HTML comments, base64 payloads, meta redirects, iframes, JS event handlers.
+- Action modes: `strip` (remove content), `redact` (replace with marker), `log_only` (preserve but flag). Configurable per-rule in `guardrail-config/ingestion_sanitize_rules.yaml`.
+- Low-trust provenance (`trust_level < 0.5`) triggers aggressive mode where `log_only` rules are elevated to warn.
+- Results tracked in `Provenance` dataclass: `sanitization_applied` (bool), `dangerous_patterns_detected` (list[str]).
 - Tag with lower `trust_level` than explicitly user-requested fetches. Require enhanced Guardian checking on any *written* output that incorporates low-trust provenance data.
+
+**Architecture diagram:** See Section 2 (Layer 2+ block) — IngestionSanitizer sits between data ingestion and the context window/RAG store.
 
 ---
 

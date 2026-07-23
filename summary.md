@@ -65,7 +65,7 @@ Every injection follows four steps:
 |---|---|
 | **Direct** | Malicious text is in the user's own request (often = jailbreak) |
 | **Indirect (data-borne)** | Instructions are embedded in an external source that the model consumes — the most dangerous for agents. The attacker provides deliberately crafted data, the LLM accepts it as instructions, consequences range from data leakage to actions under the agent's permissions |
-| **Stored** | A sub-type of indirect: the malicious prompt settles in the agent's memory, a RAG database or training data and triggers later |
+| **Stored** | A sub-type of indirect: the malicious prompt settles in the agent's memory, a RAG database or training data and triggers later | **Addressed** ✅ (Phase 4.2 — IngestionSanitizer strips script tags, zero-width chars, CSS hiding, injection-bearing HTML comments at ingestion time) |
 
 ---
 

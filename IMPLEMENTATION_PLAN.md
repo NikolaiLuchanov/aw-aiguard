@@ -128,11 +128,17 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 ### Phase 4: Defense-in-Depth (Advanced Hardening)
 *Goal: Implement complex safety patterns and structural constraints to address indirect injection and data poisoning.*
 
-|- [x] **4.1 Function-Calling Hallucination Detection**
+||- [x] **4.1 Function-Calling Hallucination Detection**
     - Add a pre-execution Guardian pass to evaluate whether model-proposed tool calls are legitimate or injected fabrications.
     - Works alongside structured schema validation — schema checks structure, Guardian checks semantics.
-- [ ] **4.2 Stored Injection Countermeasures**
+- [x] **4.2 Stored Injection Countermeasures**
     - Implement ingestion-time sanitization (e.g., stripping `<script>` tags, zero-width chars) for RAG data and fetched content.
+    - `IngestionSanitizer` with 12 configurable patterns: script tags, zero-width Unicode, CSS hiding, injection-bearing HTML comments, base64 payloads, meta redirects, iframes, JS event handlers.
+    - Action modes: `strip`, `redact`, `log_only` — configurable per-rule via `ingestion_sanitize_rules.yaml`.
+    - Low-trust provenance triggers aggressive mode elevating `log_only` to warn.
+    - Sanitization metadata tracked in `Provenance` (`sanitization_applied`, `dangerous_patterns_detected`).
+    - `BlockReason.STORED_INJECTION_DETECTED` for critical pattern detection.
+    - 24 unit tests in `tests/gateway/test_sanitizer.py`.
 - [ ] **4.3 LLM05 Output Control**
     - Implement output schema validation and HTML/text escaping for all model-generated content before it reaches the user/shell.
 - [ ] **4.4 Thinking-Mode Verification**
@@ -176,7 +182,7 @@ The Gateway Proxy is designed to be stateless. The switch from local development
 
 ## 🧪 Testing
 
-### Pytest Test Suite — 158 Unit Tests
+### Pytest Test Suite — 472 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
 
@@ -191,6 +197,7 @@ pytest tests/ -v
 |---|---|---|---|
 | **L0** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
 | **L1** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+| **L2+** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes, aggressive mode, provenance tracking
 | **L2** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies, HTTP 500, timeout, payload shape |
 | **L3** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-key rate limiting |
 | **L4** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry, status endpoint, RequestContext, custom rules |

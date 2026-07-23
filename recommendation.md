@@ -83,18 +83,19 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 
 **Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary that blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
-### 8. Defense-in-Depth Summary (Updated v1.1)
+### 8. Defense-in-Depth Summary (Updated v1.1, Phase 4.2 added)
 
-|| Layer | Tool/Mode | When | Purpose |
-||---|---|---|---|
-|| Pre-execution guardrail | Guardian fast (`--think=false`) | Before *every* tool call | Block injected commands at the edge |
-|| Function-calling check | Guardian function-hallucination mode | Before any LLM-generated tool invocation on untrusted input | Stop fabricated tool calls |
-|| HITL middleware gate | Human approval UI | Only for irreversible/outbound actions | Final safety gate — no auto-destruction |
-|| Post-response filter | Guardian thinking (`--think=true`) | After LLM generates full response | Deep reasoning pass against BYOC rules, subtle injection, trust-level violations |
-|| Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
-||| PII/Secrets scanning | Regex + entropy scoring (via `asyncio.to_thread()`) | Sequential in pipeline (Sequence A/B/C) | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
-|| CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
-|| **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
+||| Layer | Tool/Mode | When | Purpose |
+|||---|---|---|---|
+||| Pre-execution guardrail | Guardian fast (`--think=false`) | Before *every* tool call | Block injected commands at the edge |
+||| Function-calling check | Guardian function-hallucination mode | Before any LLM-generated tool invocation on untrusted input | Stop fabricated tool calls |
+||| Ingestion sanitizer | `IngestionSanitizer` (regex, Phase 4.2) | On ingested LLM responses before context window | Strip script tags, zero-width chars, CSS hiding, injection-bearing HTML comments |
+||| HITL middleware gate | Human approval UI | Only for irreversible/outbound actions | Final safety gate — no auto-destruction |
+||| Post-response filter | Guardian thinking (`--think=true`) | After LLM generates full response | Deep reasoning pass against BYOC rules, subtle injection, trust-level violations |
+||| Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
+|||| PII/Secrets scanning | Regex + entropy scoring (via `asyncio.to_thread()`) | Sequential in pipeline (Sequence A/B/C) | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
+||| CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
+||| **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
 
 ---
 
@@ -304,7 +305,7 @@ The key advantage: Guardian's `no` score is programmatically parseable — it's 
 
 ## Testing & Verification
 
-### Pytest Test Suite — 214 Tests
+### Pytest Test Suite — 472 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
 
@@ -320,6 +321,7 @@ pytest tests/ -v
 | **Provenance (L0)** | `gateway/core/provenance.py` | 23 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
 | **Schema (L0)** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
 | **PII Scanner (L1)** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+| **Ingestion Sanitizer (L2+)** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes (strip/redact/log_only), aggressive mode, provenance tracking, Unicode NFC normalization
 | **Guardian (L2)** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500 handling, timeout handling, payload shape |
 | **BYOC (L3)** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-API-key rate limiting, rule summary API |
 | **HITL (L4)** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, status endpoint, RequestContext storage for resume, custom rules, notification modes |

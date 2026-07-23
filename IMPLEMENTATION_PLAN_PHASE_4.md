@@ -12,7 +12,7 @@
 | Sub-Phase | Module | Safety Layer | Threat Mitigated | Estimated Tests |
 |---|---|---|---|---|
 | **4.1** | Function-Calling Hallucination | L2+ (Guardian function mode) | Action hijack via fabricated tool calls | 15 |
-| **4.2** | Stored Injection Countermeasures | L2+ (Ingestion sanitization) | Poisoned RAG / stored injection | 18 |
+| **4.2** | Stored Injection Countermeasures | L2+ (Ingestion sanitization) | Poisoned RAG / stored injection | ✅ Complete (24 tests) |
 | **4.3** | LLM05 Output Control | L6 (Output schema + escaping) | Answer manipulation, shell/DB injection | 16 |
 | **4.4** | Thinking-Mode Verification | L5 (Selective deep reasoning) | Subtle injection, fact substitution | 14 |
 | **4.5** | CaMeL Structural Enforcement | L0/L4 (JSON schema validation) | Data-as-code injection | 20 |
@@ -160,7 +160,7 @@ A new ingestion sanitization layer (`IngestionSanitizer`) runs in the proxy pipe
 6. **Update `central-service/api_server.py`**
    - Add `component="ingestion_sanitizer"` to severity mapping → `HIGH` (for dangerous patterns) / `WARNING` (for log_only patterns)
 
-### Tests (`tests/gateway/test_sanitizer.py`) — 18 tests
+### Tests (`tests/gateway/test_sanitizer.py`) — 24 tests
 
 | # | Test | Verifies |
 |---|---|---|

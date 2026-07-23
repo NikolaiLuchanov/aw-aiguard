@@ -72,12 +72,14 @@ flowchart TD
         User([User / AI Agent])
     end
 
-    %% Provenance Layer
+    %% Provenance Layer + Ingestion Sanitizer
     subgraph Provenance ["Layer 0: Data Ingestion & Provenance"]
         direction TB
         ProvT["Provenance Tagging<br/>source_id, trust_level, ingested_at"]
+        Sanitizer["IngestionSanitizer<br/>(Phase 4.2 ✅)<br/>strip/redact/log_only"]
+        ProvT --> Sanitizer
         Context["Context Window / RAG Store"]
-        ProvT --> Context
+        Sanitizer --> Context
     end
 
     %% The Local Proxy Gateway
@@ -88,8 +90,13 @@ flowchart TD
         subgraph PreFlight ["Layer 1: PII & Secrets Scanning (Default: PII → Guardian)"]
             P2{"Guardian Fast Mode<br/>(Cloud API Call)"}
             P1["PII & Secrets Scanning<br/>(SCAN_ACTION_MODE=block)"]
-            P3{"Function-Call<br/>Hallucination Check<br/>(Phase 4.1)"}
-            P4["JSON Schema Validation<br/>CaMeL Separation<br/>[ROADMAP]"}
+            P3{"Function-Call<br/>Hallucination Check<br/>(Phase 4.1 ✅)"}
+            P4["JSON Schema Validation<br/>CaMeL Separation<br/>[ROADMAP]"]
+        end
+
+        %% Ingestion Sanitizer (Phase 4.2)
+        subgraph SanitizerLayer ["Layer 2+: Ingestion Sanitizer (Phase 4.2 ✅)"]
+            S1["IngestionSanitizer<br/>strip/redact/log_only<br/>12 patterns"]
         end
 
         %% Decision Logic

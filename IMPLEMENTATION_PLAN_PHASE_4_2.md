@@ -1,6 +1,7 @@
 # aw-aiguard: Phase 4.2 Implementation Plan — Stored Injection Countermeasures
 
-**Status:** Draft Plan  
+**Status:** ✅ Complete (2026-07-22)
+**Implementation:** All 7 steps complete, 24 tests passing, 0 regressions  
 **Date:** 2026-07-22  
 **Prerequisites:** Phases 1–3 complete (core proxy, HITL, BYOC, provenance, central service, dashboard, config sync) + Phase 4.1 complete (function-call hallucination detection)  
 **Goal:** Implement ingestion-time sanitization to prevent poisoned RAG data and stored injection attacks.
@@ -372,7 +373,7 @@ from gateway.core.sanitizer import IngestionSanitizer, SanitizationResult  # Pha
 
 **File:** `tests/gateway/test_sanitizer.py` (new)
 
-**Total tests:** 18
+**Total tests:** 24 (plan specified 18, 6 extras added: meta_redirect, iframe, event_handler, rules_summary, default values, high-trust non-aggressive mode)
 
 ### 4.1 Fixture Setup
 
@@ -845,3 +846,21 @@ After Phase 4.2 completion:
 | Total suite | 365* | 383 | +18 |
 
 *Estimated current count based on existing test files. Phase 4.1 added 17 tests; Phase 4.2 adds 18.
+
+---
+
+## 5. Implementation Checklist
+
+| Step | File | Status |
+|---|---|---|
+| 1 | `gateway/core/sanitizer.py` | ✅ Complete |
+| 2 | `guardrail-config/ingestion_sanitize_rules.yaml` | ✅ Complete |
+| 3 | `gateway/core/proxy.py` integration | ✅ Complete |
+| 4 | `gateway/core/provenance.py` update | ✅ Complete |
+| 5 | `gateway/core/block.py` update | ✅ Complete |
+| 6 | `central-service/api_server.py` update | ✅ Complete |
+| 7 | `gateway/core/__init__.py` exports | ✅ Complete |
+| Tests | `tests/gateway/test_sanitizer.py` (24 tests) | ✅ Complete |
+| Test fixtures | `tests/conftest.py` additions | ✅ Complete |
+| Full suite | `pytest tests/` — 472 tests, 0 failures | ✅ Complete |
+| Docs | All 8 referenced docs updated | ✅ Complete |
