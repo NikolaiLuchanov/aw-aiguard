@@ -15,6 +15,7 @@ from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 from gateway.core.audit import AuditLogger
 from gateway.core.provenance import Provenance
 from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
+from gateway.core.sanitizer import IngestionSanitizer
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -27,14 +28,15 @@ class LLMProxy:
     """
 
     def __init__(
-        self, 
-        target_url: str, 
-        api_key: str, 
-        guardian: Optional[GuardianGuard] = None, 
+        self,
+        target_url: str,
+        api_key: str,
+        guardian: Optional[GuardianGuard] = None,
         scanner: Optional[PIIScanner] = None,
         hitl: Optional[HITLGate] = None,
         byoc: Optional[BYOCEngine] = None,
         detector: Optional[FunctionCallDetector] = None,  # Phase 4.1
+        sanitizer: Optional[IngestionSanitizer] = None,    # Phase 4.2
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -45,6 +47,7 @@ class LLMProxy:
         self.hitl = hitl
         self.byoc = byoc
         self.detector = detector
+        self.sanitizer = sanitizer
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -391,7 +394,29 @@ class LLMProxy:
                 response = await self._handle_streaming(method, url, headers, current_content)
             else:
                 response = await self._handle_standard(method, url, headers, current_content)
-            
+
+            # Phase 4.2: Sanitize ingested content (LLM response → client)
+            # Catches injected content the LLM may have generated from poisoned context
+            if self.sanitizer and not is_streaming and not isinstance(response, StreamingResponse):
+                response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+                sanitize_result = self.sanitizer.sanitize(response_text, provenance=provenance)
+
+                # Log any dangerous patterns
+                if sanitize_result.dangerous_patterns:
+                    await self.audit_logger.log_event(
+                        self.api_key, "warn", "ingestion_sanitizer", "",
+                        reason=f"Dangerous patterns in response: {', '.join(sanitize_result.dangerous_patterns)}",
+                        prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                    ) if self.audit_logger else None
+
+                # Replace response content with sanitized version
+                if sanitize_result.stripped_count > 0:
+                    response = Response(
+                        content=sanitize_result.cleaned_content.encode('utf-8'),
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                    )
+
             # Final ALLOW — log that the request passed all checks and was forwarded
             await self.audit_logger.log_event(
                 self.api_key, "allow", component_name, prompt,

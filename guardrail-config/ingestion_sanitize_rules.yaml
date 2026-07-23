@@ -1,0 +1,104 @@
+# Ingestion Sanitization Rules (Phase 4.2)
+#
+# Patterns applied to all ingested content (RAG docs, web pages,
+# file reads, GitHub content) before they enter the LLM context window.
+#
+# Each pattern has:
+#   name:     Human-readable identifier
+#   pattern:  Python regex (applied after Unicode NFC normalization)
+#   action:   strip | redact | log_only
+#   severity: critical | high | medium | low
+
+patterns:
+  # --- Script tags (critical) ---
+  - name: script_tag
+    pattern: '<script(?:\s[^>]*)?>.*?</script>'
+    flags: "re.IGNORECASE | re.DOTALL"
+    action: strip
+    severity: critical
+    description: "HTML script tags and their content"
+
+  - name: script_tag_unclosed
+    pattern: '<script(?:\s[^>]*)?>[^<]*$'
+    flags: "re.IGNORECASE"
+    action: strip
+    severity: critical
+    description: "Unclosed script tags (EOF without </script>)"
+
+  # --- JavaScript event handlers ---
+  - name: js_event_handlers
+    pattern: '\bon(?:click|load|error|mouseover|submit|focus|blur)\s*='
+    flags: "re.IGNORECASE"
+    action: strip
+    severity: critical
+    description: "JavaScript event handler attributes (onX=)"
+
+  # --- Zero-width Unicode characters (high) ---
+  - name: zero_width_chars
+    pattern: '[\u200b\u200c\u200d\ufeff\u2060\u00ad]'
+    action: strip
+    severity: high
+    description: "Zero-width and invisible Unicode characters"
+
+  # --- HTML comments with injection keywords (critical) ---
+  - name: html_comment_injection
+    pattern: '<!--.*?(?:injection|prompt|ignore|skip|override|bypass|exfiltrate|steal).{0,200}-->'
+    flags: "re.IGNORECASE | re.DOTALL"
+    action: strip
+    severity: critical
+    description: "HTML comments containing injection-related keywords"
+
+  # --- Generic HTML comments (high) ---
+  - name: html_comments
+    pattern: '<!--[^>]*?-->|<!--.*?-->'
+    flags: "re.DOTALL"
+    action: redact
+    severity: high
+    description: "HTML comments (generic, no keyword filter)"
+
+  # --- CSS hiding patterns (medium) ---
+  - name: css_display_none
+    pattern: '(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0)'
+    action: redact
+    severity: medium
+    description: "CSS properties that hide content from visual rendering"
+
+  - name: css_color_white
+    pattern: '(?:color\s*:\s*white\s*;\s*background\s*:\s*white|background\s*:\s*#fff\s*;\s*color\s*:\s*#fff)'
+    action: redact
+    severity: medium
+    description: "White-on-white text hiding pattern"
+
+  # --- Base64-encoded payloads (medium) ---
+  - name: base64_payload
+    pattern: '[A-Za-z0-9+/]{80,}={0,2}'
+    action: log_only
+    severity: medium
+    description: "Long base64-encoded strings (potential encoded commands)"
+
+  # --- Inline styles with hidden content (low) ---
+  # Uses literal block scalar | to avoid YAML quoting conflicts with backslashes and quotes
+  - name: inline_hidden_style
+    pattern: |
+      style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden|height\s*:\s*0|width\s*:\s*0|overflow\s*:\s*hidden)[^"']*["']
+    flags: "re.IGNORECASE"
+    action: redact
+    severity: low
+    description: "Inline styles hiding content"
+
+  # --- Meta refresh / redirect tags (high) ---
+  - name: meta_redirect
+    pattern: |
+      <meta\s+http-equiv\s*=\s*["']refresh["'][^>]*>
+    flags: "re.IGNORECASE"
+    action: strip
+    severity: high
+    description: "HTML meta refresh redirect tags"
+
+  # --- Iframe embeds (high) ---
+  - name: iframe_embed
+    pattern: '<iframe[^>]*>.*?</iframe>'
+    flags: "re.IGNORECASE | re.DOTALL"
+    action: strip
+    severity: high
+    description: "Iframe embedding tags"

@@ -21,14 +21,16 @@ SUPPORTED_SOURCE_TYPES = frozenset({
 })
 
 
-@dataclass(frozen=True)
+@dataclass
 class Provenance:
-    """Immutable provenance record for a single request."""
+    """Provenance record for a single request (mutable to support sanitization tracking)."""
 
     source_id: str
     source_type: str
     trust_level: float
     ingested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    sanitization_applied: bool = False
+    dangerous_patterns_detected: list = field(default_factory=list)
 
     def to_dict(self) -> Dict:
         """Serialize to dict for JSON/audit/log storage."""
@@ -103,3 +105,13 @@ class Provenance:
     def is_known(self) -> bool:
         """Return True if source_type is a recognized type (not 'unknown')."""
         return self.source_type in SUPPORTED_SOURCE_TYPES and self.source_type != "unknown"
+
+    def record_sanitization(self, patterns: list[str], applied: bool) -> None:
+        """Record sanitization results in provenance metadata."""
+        self.sanitization_applied = applied
+        self.dangerous_patterns_detected = list(patterns)
+
+    @property
+    def has_dangerous_patterns(self) -> bool:
+        """Return True if dangerous patterns were detected during sanitization."""
+        return len(self.dangerous_patterns_detected) > 0

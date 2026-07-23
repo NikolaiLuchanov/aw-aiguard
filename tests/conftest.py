@@ -57,6 +57,12 @@ def function_call_rules_path():
 
 
 @pytest.fixture
+def sanitize_rules_path():
+    """Path to the real ingestion_sanitize_rules.yaml."""
+    return str(GUARDRAIL_CONFIG / "ingestion_sanitize_rules.yaml")
+
+
+@pytest.fixture
 def settings_yaml_path():
     """Path to the real settings.yaml."""
     return str(GUARDRAIL_CONFIG / "settings.yaml")
@@ -104,6 +110,20 @@ def temp_byoc_rules(tmp_path):
         path = tmp_path / "byoc_rules.yaml"
         with open(path, "w") as f:
             yaml.dump({"rules": rules}, f)
+        return str(path)
+
+    return _write
+
+
+@pytest.fixture
+def temp_sanitize_rules(tmp_path):
+    """Write custom sanitize rules to a temp file and return its path."""
+    import yaml
+
+    def _write(rules):
+        path = tmp_path / "ingestion_sanitize_rules.yaml"
+        with open(path, "w") as f:
+            yaml.dump({"patterns": rules}, f)
         return str(path)
 
     return _write
