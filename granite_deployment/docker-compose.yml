@@ -1,0 +1,74 @@
+# aw-aiguard: Granite Guardian 4.1 — Docker Compose
+#
+# Deploys ibm-granite/granite-guardian-4.1-8b (Q4_K_M quantized)
+# on AWS EC2 g6.xlarge/g6.2xlarge with NVIDIA L4 GPU.
+#
+# Prerequisites:
+#   1. NVIDIA Container Toolkit installed on host
+#   2. GGUF model at /opt/granite-guardian/models/granite-guardian-4.1-8b-Q4_K_M.gguf
+#   3. Security group allows inbound TCP 8080 from aw-aiguard proxy only
+#
+# GPU Passthrough Stack:
+#   Physical GPU (L4) → Host NVIDIA Drivers → NVIDIA Container Toolkit
+#     → Docker (--gpus all + runtime: nvidia) → llama.cpp CUDA binary
+#     → Direct GPU execution, zero emulation
+#
+# Without ALL of the above, the container falls back to CPU.
+
+services:
+  granite-guardian:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    container_name: granite-guardian
+    restart: unless-stopped
+
+    # ─── GPU Access (CRITICAL — both fields required) ───
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # ─── Host Ports ───
+    ports:
+      - "8080:8080"
+
+    # ─── Model Volume (read-only — model is static) ───
+    volumes:
+      - ./models:/models:ro
+
+    # ─── NVIDIA Environment (explicit, not auto-injected) ───
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    # ─── llama-server Configuration ───
+    # All layers offloaded to GPU (-ngl 99), Q4_K_M model ~4.5 GB VRAM
+    command: >
+      llama-server
+      --model /models/granite-guardian-4.1-8b-Q4_K_M.gguf
+      --host 0.0.0.0
+      --port 8080
+      --ctx-size 4096
+      -ngl 99
+      --batch-size 512
+      --ubatch-size 256
+      --log-disable
+      --embedding
+
+    # ─── Health Check ───
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # ─── Logging ───
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"

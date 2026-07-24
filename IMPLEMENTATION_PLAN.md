@@ -196,10 +196,26 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - All attacks blocked/paused by appropriate safety layers. Zero false positives.
     - Total test suite: 654 tests (569 existing + 85 new)
     - Report: `docs/red_team_report.md`
-- [ ] **5.2 Performance Optimization**
+|- [ ] **5.2 Performance Optimization**
     - Tune Guardian HTTP latency and FastAPI middleware to minimize round-trips between local proxy and cloud backend.
-- [ ] **5.3 Documentation & Handover**
-    - Finalize the setup guide, developer documentation, and security audit logs.
+- [x] **5.3 Documentation & Handover** ✅ Completed (2026-07-23)
+    - **5 new documentation files created:**
+      - `docs/setup_guide.md` — Complete setup guide with prerequisites, quick start, configuration, troubleshooting, and upgrade instructions
+      - `docs/architecture.md` — Full architecture documentation: pipeline layers, data flow, security model, provenance system, HITL, BYOC, agency constraints
+      - `docs/audit_guide.md` — Security audit trail guide: event schema, severity mapping, SQL queries, incident response procedures
+      - `docs/developer_guide.md` — Developer guide: project structure, adding new safety layers, adding rules/schemas, debugging
+      - `docs/security_checklist.md` — Security checklist with implementation status for all 10 architect requirements + 5 user requirements
+    - **9 existing documentation files updated:**
+      - `README.md` — Updated quick start with Central Service startup, linked to setup guide
+      - `gateway/README.md` — Added performance tuning section (Phase 5.2 reference)
+      - `central-service/README.md` — Added operational guide reference
+      - `guardrail-config/README.md` — Updated with all 12 YAML files and enhanced descriptions
+      - `IMPLEMENTATION_PLAN.md` — Marked Phase 5.3 complete, updated test count to 654
+      - `architecture-design.md` — Added Phase 5 section: "Validation & Finalization"
+      - `structure.md` — Updated directory listing with docs/ and test directories
+      - `recommendation.md` — Added Phase 5 implementation status table
+      - `architecture_workflow.html` — Added Phase 5.1 (Red Team) and Phase 5.2 (Performance) nodes
+    - Total documentation files: 1 new (red_team_report.md from Phase 5.1) + 5 new (Phase 5.3) = 6 in docs/
 
 ---
 

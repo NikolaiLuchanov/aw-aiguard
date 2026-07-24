@@ -60,6 +60,7 @@ aw-aiguard/                          # Project root
 │   │   ├── test_lethal_trifecta.py   # 5 tests: full trifecta, broken trifecta variants
 │   │   ├── test_delegation_chains.py # 5 tests: depth limit, chain broken, approval, MCP vetting
 │   │   └── test_integration_pipeline.py # 6 tests: full pipeline, performance baseline
+│   ├── performance/                  # Performance benchmarks (Phase 5.2)
 │   ├── gateway/                      # Gateway layer tests
 │   │   ├── test_guardrail.py         # GuardianGuard: allow/block/warn/fail-strategies
 │   │   ├── test_scanner.py           # PIIScanner: AWS keys, private keys, email redaction

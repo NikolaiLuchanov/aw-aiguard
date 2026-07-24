@@ -249,6 +249,15 @@ curl http://localhost:9020/byoc/rules
 curl http://localhost:9020/v1/invalid-endpoint
 ```
 
+## 🔧 Performance Tuning
+
+For performance optimization details (Phase 5.2), see `docs/setup_guide.md` and `docs/architecture.md`. Key tuning knobs:
+
+- **Guardian cache:** Response caching for identical payloads (controlled via `guardian_cache_ttl`)
+- **Parallel scanning:** Use `SCAN_SEQUENCE=C` when secret privacy is not a concern
+- **Connection pooling:** httpx.AsyncClient configured with `max_connections=100`
+- **Streaming:** Optimized SSE handling to avoid buffering
+
 ## ⚠️ Safety Notes
 - **Local Only**: This proxy must only run on `localhost`. Never expose port 9020 to the public internet.
 - **Secret Management**: Never commit the `.env` file to version control. Use `.env.example` for templates.

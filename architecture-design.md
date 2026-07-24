@@ -557,5 +557,8 @@ aw-aiguard/
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
 | P2 | Provenance tagging schema + enforcement (Section 5) | ✅ Phase 2.5 | Pairs with audit infrastructure |
 | P2 | Centralized config sync (Section 9) | ✅ Phase 3.4 | Gateway heartbeat, settings poll loop, diff detection, hot-reload |
-|| P2 | Sub-agent chain depth limit logic (Section 7A) | ✅ Phase 4.5.2 | AgencyController enforces max depth with provenance chain tracking |
-|| P2 | Data/command separation schemas (Section 3.5) | ✅ Phase 4.5.1 | SchemaValidator validates all tool-call parameters against JSON schemas |
+||| P2 | Sub-agent chain depth limit logic (Section 7A) | ✅ Phase 4.5.2 | AgencyController enforces max depth with provenance chain tracking |
+||| P2 | Data/command separation schemas (Section 3.5) | ✅ Phase 4.5.1 | SchemaValidator validates all tool-call parameters against JSON schemas |
+| P3 | Red-team adversarial testing (Phase 5.1) | ✅ 85 tests | All attacks blocked, zero false positives |
+| P4 | Performance benchmarking (Phase 5.2) | Pending | Latency baseline and optimization |
+| P5 | Documentation & handover (Phase 5.3) | ✅ Complete | 5 new docs + 9 updated docs |

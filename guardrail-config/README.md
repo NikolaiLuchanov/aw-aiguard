@@ -13,10 +13,11 @@ YAML-based configuration files for all safety layers. Each file is hot-reloadabl
 | `function_call_rules.yaml` | Function-call hallucination detection (trust threshold, fail strategy, tool overrides) | `FunctionCallDetector` |
 | `tool_schemas.yaml` | CaMeL JSON schemas for tool parameters (Draft 7 validation) | `SchemaValidator` |
 | `camel_rules.yaml` | CaMeL enforcement rules (all hard_stop) | `SchemaValidator` |
-| `byoc_output_control.yaml` | Output-specific BYOC rules (LLM05) | `OutputController` |
-| `output_schemas.yaml` | LLM05 output schema definitions | `OutputController` |
-| `thinking_mode_rules.yaml` | Thinking-mode verification thresholds, actions, timeout | `ThinkingModeVerifier` |
-| `agency_rules.yaml` | Sub-agent delegation depth limits, MCP server vetting | `AgencyController` |
+| `output_schemas.yaml` | LLM05 output schema definitions (5 tool types + default) | `OutputController` |
+| `byoc_output_control.yaml` | Output-specific BYOC rules (shell interpolation, SQL quoting, schema validation) | `OutputController` |
+| `thinking_mode_rules.yaml` | Thinking-mode verification thresholds, actions, timeout, fail strategy | `ThinkingModeVerifier` |
+| `ingestion_sanitize_rules.yaml` | Ingestion sanitization patterns (12 patterns: script tags, zero-width chars, CSS hiding, etc.) | `IngestionSanitizer` |
+| `agency_rules.yaml` | Sub-agent delegation depth limits, MCP server vetting, approval requirements | `AgencyController` |
 
 ## `function_call_rules.yaml`
 

@@ -105,19 +105,25 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 Based on the architecture-design1.md v1.1 alignment:
 
 ### Pre-MVP Priority Tasks (Phase 1 Sprints)
-|| Priority | Task | Status |
-|---|---|---|---|---|---|---|
+||| Priority | Task | Status |
+|---|---|---|---|
 | **P0** | Core native proxy at `localhost:9020` with cloud-based Guardian pre-flight gate | ✅ Implemented |
 | **P0** | HITL middleware for irreversible actions (send email, delete data, commit code) | ✅ Implemented |
 | **P0** | HITL resume flow (store full request, re-forward on approval) | ✅ Implemented |
 | **P1** | Post-processing thinking-mode verification layer (cloud-side) | ✅ Implemented (Phase 4.4) |
 | **P2** | Cloud DB partition lifecycle management (archive → MinIO, auto-create) | ✅ Phase 2.4 |
 | **P2** | Provenance tagging schema + enforcement pipeline | ✅ Phase 2.5 |
-| **P2** | BYOC stop-limits engine (codified "never do this" rules) | ✅ Basic enforcement active |
+| **P2** | BYOC stop-limits engine (codified "never do this" rules) | ✅ Phase 3.2 |
 | **P2** | Centralized config sync (heartbeat + settings poll) | ✅ Phase 3.4 |
-| P2 | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
-|| P2 | Data/command separation validation schemas | ✅ Phase 4.5.1 |
-|| P2 | Agency constraints: delegation depth limits, chain integrity | ✅ Phase 4.6 |
+| **P2** | Central backend (PostgreSQL + MinIO + API server) | ✅ Phase 2.1 Implemented |
+| **P2** | Data/command separation validation schemas | ✅ Phase 4.5.1 |
+| **P2** | Agency constraints: delegation depth limits, chain integrity | ✅ Phase 4.6 |
+| **P3** | Ingestion sanitization for stored injection | ✅ Phase 4.2 |
+| **P4** | LLM05 output control (schema validation, escaping, quoting) | ✅ Phase 4.3 |
+| **P4** | Function-call hallucination detection | ✅ Phase 4.1 |
+| **P5** | Red-team adversarial testing | ✅ Phase 5.1 — 85 tests, all passed |
+| **P6** | Performance optimization | ⏳ Phase 5.2 — pending |
+| **P7** | Documentation & handover | ✅ Phase 5.3 — 5 new docs + 9 updated docs |
 
 ### Key Design Decisions Aligned with Architecture
 1. **HITL is the bottleneck you *want*:** The architecture places HITL middleware between pre-flight Guardian and actual tool execution. This intentional friction is by design — slow security > fast catastrophe.

@@ -36,3 +36,10 @@ pytest tests/central_service/ -v
 ```
 
 All tests are **unit tests** — they mock all external dependencies (PostgreSQL, MinIO, HTTP endpoints). No live services required.
+
+## Operational Guide
+
+For operational details (alerting, partition lifecycle, dashboard), see:
+- **Setup guide:** `docs/setup_guide.md`
+- **Architecture:** `docs/architecture.md`
+- **Audit trail:** `docs/audit_guide.md`

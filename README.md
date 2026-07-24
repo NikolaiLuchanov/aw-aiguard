@@ -4,6 +4,8 @@
 
 ## 🚀 Quick Start
 
+For the complete setup guide with step-by-step instructions, see [docs/setup_guide.md](docs/setup_guide.md).
+
 ### 1. Environment Setup
 This project uses a single virtual environment at the root for local development of both the Gateway and the Central Service.
 
@@ -16,14 +18,37 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
-Copy the example environment file and fill in your API keys:
+### 2. Start the Central Service
+
 ```bash
-cp .env.example .env
-# Edit .env with your ANTHROPIC_API_KEY and OPENAI_API_KEY
+cd central-service
+docker compose up -d
 ```
 
-### 3. Port Map & Communication Flow
+This starts PostgreSQL 16, MinIO, and the API server.
+
+### 3. Gateway Proxy Setup
+Copy the environment file and configure your LLM provider API key:
+
+```bash
+# Edit .env with your LLM provider API key and GUARDIAN_URL
+```
+
+### 4. Start the Gateway Proxy
+
+```bash
+chmod +x run-gateway-dev.sh
+./run-gateway-dev.sh
+```
+
+### 5. Verify
+
+```bash
+# Test the proxy
+curl http://localhost:9020/health
+```
+
+### 6. Port Map & Communication Flow
 
 | Port | Role | Direction | Description |
 | :--- | :--- | :--- | :--- |
