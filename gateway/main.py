@@ -167,14 +167,18 @@ output_controller = OutputController(
 
 # Initialize the Proxy Engine with all security components
 proxy_engine = LLMProxy(
-    target_url=TARGET_URL, 
-    api_key=API_KEY, 
+    target_url=TARGET_URL,
+    api_key=API_KEY,
     guardian=guardian,
     scanner=scanner,
     hitl=hitl,
     byoc=byoc,
-    thinking_verifier=thinking_verifier,  # Phase 4.4
-    agency_controller=agency_controller,   # Phase 4.5.2
+    detector=function_call_detector,          # Phase 4.1
+    sanitizer=sanitizer,                      # Phase 4.2
+    output_controller=output_controller,      # Phase 4.3
+    validator=schema_validator,               # Phase 4.5.1
+    thinking_verifier=thinking_verifier,      # Phase 4.4
+    agency_controller=agency_controller,      # Phase 4.5.2
     audit_logger=audit_logger,
     scan_sequence=SCAN_SEQUENCE
 )
