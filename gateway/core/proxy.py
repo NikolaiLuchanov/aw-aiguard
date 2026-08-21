@@ -3,13 +3,15 @@ import logging
 import json
 import asyncio
 import hashlib
+import uuid
+import time
 from typing import AsyncGenerator, Dict, List, Optional
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 
 from gateway.core.guardrail import GuardianGuard, SafetyDecision
 from gateway.core.scanner import PIIScanner
-from gateway.core.hitl import HITLGate, HitlDecision, RequestContext
+from gateway.core.hitl import HITLGate, HitlDecision, RequestContext, PendingRequest
 from gateway.core.block import generate_block_response, BlockReason
 from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 from gateway.core.audit import AuditLogger
@@ -383,6 +385,45 @@ class LLMProxy:
             agency_result = self.agency_controller.check_delegation(provenance, tool_name)
             if not agency_result.allowed:
                 component_name = "agency_controller"
+
+                # --- approval_required → HITL pause (not a flat block) ---
+                if agency_result.rule_name == "approval_required":
+                    # Fail-safe: no HITL gate configured → block (no approver available)
+                    if self.hitl is None:
+                        return generate_block_response(
+                            reason=BlockReason.AGENCY_APPROVAL_REQUIRED,
+                            message=agency_result.reason,
+                            blocked_by="agency_controller",
+                        )
+                    request_id = str(uuid.uuid4())
+                    request_context = RequestContext(
+                        method=method,
+                        url=url,
+                        headers=dict(request.headers),
+                        body=current_content,
+                    )
+                    self.hitl.pending_requests[request_id] = PendingRequest(
+                        request_id=request_id,
+                        prompt=prompt,
+                        rule_name="agency_approval",
+                        timeout_seconds=self.hitl.default_timeout,
+                        request_context=request_context,
+                        timeout_at=time.time() + self.hitl.default_timeout,
+                        prompt_hash=prompt_hash or "",
+                        provenance=provenance.to_dict(),
+                    )
+                    await self.audit_logger.log_event(
+                        self.api_key, "pause", component_name, prompt,
+                        reason=agency_result.reason, request_id=request_id,
+                        prompt_hash=prompt_hash, provenance=provenance.to_dict(),
+                    ) if self.audit_logger else None
+                    return Response(
+                        content=json.dumps(self.hitl.get_pause_response(request_id, prompt)),
+                        status_code=202,
+                        media_type="application/json",
+                    )
+
+                # --- depth / chain / other → flat block (unchanged) ---
                 # Map reason to appropriate BlockReason
                 if "depth" in agency_result.reason.lower():
                     block_reason = BlockReason.AGENCY_DEPTH_EXCEEDED

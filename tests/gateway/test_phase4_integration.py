@@ -279,7 +279,7 @@ class TestPhase4Integration:
 
     @pytest.mark.asyncio
     async def test_approval_required_action(self, full_proxy):
-        """email_send requires HITL approval → blocked by agency check."""
+        """email_send requires HITL approval → paused for human approval (202)."""
         with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
             mock_client = AsyncMock()
             full_proxy.client = mock_client
@@ -293,6 +293,43 @@ class TestPhase4Integration:
                 "messages": [{"role": "user", "content": "send email"}],
                 "tool_name": "email_send",
                 "parameters": {"to": "user@example.com", "subject": "Hi", "body": "Hello"},
+            }
+
+            async def receive():
+                return {"type": "http.request", "body": json.dumps(body).encode()}
+            async def send(msg):
+                pass
+            request = Request(scope, receive, send)
+            response = await full_proxy.forward_request(request)
+            assert response.status_code == 202
+            resp_body = json.loads(response.body)
+            assert resp_body["status"] == "pending_approval"
+            assert "request_id" in resp_body
+
+    @pytest.mark.asyncio
+    async def test_depth_exceeded_still_blocks(self, full_proxy):
+        """Delegation depth exceeded → still 403 block (not paused)."""
+        from gateway.core.agency_controller import AgencyCheckResult
+        with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            full_proxy.client = mock_client
+            full_proxy.guardian.check_safety = AsyncMock(return_value=SafetyDecision.ALLOW)
+            # Force a depth-blocked result (rule_name defaults to None → block branch)
+            full_proxy.agency_controller.check_delegation = MagicMock(
+                return_value=AgencyCheckResult(
+                    allowed=False,
+                    reason="Delegation depth limit exceeded (max=0)",
+                )
+            )
+
+            scope = {
+                "type": "http", "method": "POST", "path": "/v1/chat/completions",
+                "headers": [],
+            }
+            body = {
+                "messages": [{"role": "user", "content": "delegate deeper"}],
+                "tool_name": "delegate_task",
+                "parameters": {"task": "do something"},
             }
 
             async def receive():
