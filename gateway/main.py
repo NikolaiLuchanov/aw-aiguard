@@ -148,6 +148,23 @@ OUTPUT_CONTROL_RULES_PATH = os.path.join(
 schema_validator = SchemaValidator(schema_path=TOOL_SCHEMAS_PATH, rules_path=CAMEL_RULES_PATH)
 agency_controller = AgencyController(rules_path=AGENCY_RULES_PATH)
 
+# Phase 4.1: Function-Call Hallucination Detector (reuse the shared guardian)
+function_call_detector = FunctionCallDetector(
+    rules_path=FUNCTION_CALL_RULES_PATH,
+    guardian=guardian,
+)
+
+# Phase 4.2: Ingestion Sanitizer
+sanitizer = IngestionSanitizer(
+    rules_path=SANITIZE_RULES_PATH,
+)
+
+# Phase 4.3: LLM05 Output Controller
+output_controller = OutputController(
+    schema_path=OUTPUT_SCHEMAS_PATH,
+    byoc_rules_path=OUTPUT_CONTROL_RULES_PATH,
+)
+
 # Initialize the Proxy Engine with all security components
 proxy_engine = LLMProxy(
     target_url=TARGET_URL, 
