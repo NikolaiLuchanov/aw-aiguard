@@ -17,6 +17,9 @@ from gateway.core.audit import AuditLogger
 from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
 from gateway.core.schema_validator import SchemaValidator
 from gateway.core.agency_controller import AgencyController
+from gateway.core.function_call_detector import FunctionCallDetector   # Phase 4.1
+from gateway.core.sanitizer import IngestionSanitizer                  # Phase 4.2
+from gateway.core.output_control import OutputController               # Phase 4.3
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,24 @@ CAMEL_RULES_PATH = os.path.join(
 )
 AGENCY_RULES_PATH = os.path.join(
     os.path.dirname(__file__), "..", "guardrail-config", "agency_rules.yaml"
+)
+
+# Phase 4.1: Function-Call Hallucination Detection
+FUNCTION_CALL_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "function_call_rules.yaml"
+)
+
+# Phase 4.2: Ingestion Sanitizer
+SANITIZE_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "ingestion_sanitize_rules.yaml"
+)
+
+# Phase 4.3: LLM05 Output Control
+OUTPUT_SCHEMAS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "output_schemas.yaml"
+)
+OUTPUT_CONTROL_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "guardrail-config", "byoc_output_control.yaml"
 )
 schema_validator = SchemaValidator(schema_path=TOOL_SCHEMAS_PATH, rules_path=CAMEL_RULES_PATH)
 agency_controller = AgencyController(rules_path=AGENCY_RULES_PATH)
