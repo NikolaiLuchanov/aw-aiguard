@@ -5,8 +5,8 @@ Deploy `ibm-granite/granite-guardian-4.1-8b` (Q4_K_M) on AWS EC2 GPU instances u
 ## Quick Start
 
 ```bash
-# 1. SSH into EC2
-ssh ec2-user@<instance-ip>
+# 1. SSH into EC2 via SSM
+aws ssm start-session --target i-<instance-id>
 
 # 2. Create directories
 mkdir -p granite_deployment/models
@@ -43,13 +43,13 @@ If ANY of these fail, the container runs on CPU (~0.5–2 tokens/sec vs ~100 req
 ## Architecture
 
 ```
-AWS EC2 g6.xlarge/g6.2xlarge
-├── NVIDIA L4 GPU (24 GB VRAM)
+AWS EC2 g6e.xlarge
+├── NVIDIA L4 (48 GB VRAM)
 │   └── llama.cpp container
 │       ├── Model: granite-guardian-4.1-8b-Q4_K_M.gguf (~4.5 GB)
 │       ├── API: OpenAI-compatible (/v1/chat/completions)
 │       └── Port: 8080
-└── Security: Port 8080 restricted to aw-aiguard proxy SG
+└── Security: Port 8080 restricted to user's public IP (/32)
 ```
 
 ## Integration with aw-aiguard Gateway
@@ -125,7 +125,7 @@ ls -lh /opt/granite-guardian/models/granite-guardian-4.1-8b-Q4_K_M.gguf
 curl -v http://<aws-private-ip>:8080/health
 
 # If connection refused:
-# 1. Check security group allows port 8080 from proxy SG
+# 1. Check security group allows port 8080 from your IP
 # 2. Check container is listening
 docker exec granite-guardian netstat -tlnp | grep 8080
 # Should show: LISTEN 0.0.0.0:8080
@@ -133,10 +133,11 @@ docker exec granite-guardian netstat -tlnp | grep 8080
 
 ## Verification
 
-Run the automated verification script:
+Run the pytest suite:
 
 ```bash
-./verify_deployment.sh
+cd tests
+pytest test_guardrail.py test_proxy.py -v
 ```
 
 Expected output:
@@ -156,7 +157,7 @@ Expected output:
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Container configuration with GPU passthrough |
-| `verify_deployment.sh` | Automated verification script |
+| `tests/` | Pytest suite for deployment verification |
 | `README.md` | This file — deployment guide and troubleshooting |
 
 ## Maintenance

@@ -4,7 +4,7 @@
 **Date:** 2026-07-24  
 **Model:** `ibm-granite/granite-guardian-4.1-8b` (8B parameter safety classification model)  
 **Deployment Target:** AWS EC2 (GPU)  
-**Core Objective:** Deploy Granite Guardian 4.1 8B to AWS in the most effective performance/price balance, serving as the safety scoring engine for the existing aw-aiguard proxy gateway.
+**Core Objective:** Deploy Granite Guardian 4.1 8B to AWS in the most effective performance/price balance, serving as the safety scoring engine for the existing aw-aiguard gateway.
 
 ---
 
@@ -67,12 +67,12 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 
 | Tier | GPU Instance | VRAM | Batch Size | Est. Throughput | Monthly Cost (On-Demand) |
 |---|---|---|---|---|---|
-| **Absolute Minimum** | g6.xlarge (1× L4, 24 GB) | 24 GB | 8 | ~50–100 req/s | ~$588 |
-| **Sweet Spot** | g6.2xlarge (1× L4, 24 GB) | 24 GB | 16–32 | ~100–200 req/s | ~$588 |
-| **Headroom** | g6.4xlarge (1× L4, 24 GB) | 24 GB | 32+ | ~200+ req/s | ~$1,176 |
-| **Multi-Instance** | 2× g6.xlarge | 2× 24 GB | 8 each | ~100–200 req/s (total) | ~$1,176 |
+| **Absolute Minimum** | g6.xlarge (1× L4, 24 GB) | 24 GB | 8 | ~50–100 req/s | ~$335 |
+| **Sweet Spot** | g6e.xlarge (1× L40S, 48 GB) | 48 GB | 16–32 | ~100–200 req/s | ~$335 |
+| **Headroom** | g6e.2xlarge (2× L40S, 96 GB) | 96 GB | 32+ | ~200+ req/s | ~$670 |
+| **Multi-Instance** | 2× g6e.xlarge | 2× 48 GB | 8 each | ~100–200 req/s (total) | ~$670 |
 
-> **Recommendation: Start with g6.2xlarge.** It provides the best balance — single L4 GPU with 24 GB VRAM can comfortably fit Q4_K_M quantization with headroom for batch processing, Python runtime, and Docker overhead. The g6.xlarge and g6.2xlarge share the same GPU (1× NVIDIA L4, 24 GB) — the difference is CPU/RAM (4 vCPU/16 GB vs 8 vCPU/32 GB). Since the inference is GPU-bound, g6.2xlarge's extra CPU helps with pre/post-processing without adding cost.
+> **Recommendation: Start with g6e.xlarge.** It provides the best balance — single L40S GPU with 48 GB VRAM can comfortably fit Q4_K_M quantization with headroom for batch processing, Python runtime, and Docker overhead. The L40S (48 GB) doubles the VRAM of the L4, providing significant headroom for batch processing.
 
 ---
 
@@ -82,7 +82,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 
 ```
 ┌─────────────────────────────────────────┐
-│  AWS EC2 g6.2xlarge                    │
+│  AWS EC2 g6e.xlarge                    │
 │  ┌───────────────────────────────────┐  │
 │  │  Container: llama.cpp             │  │
 │  │  ┌─────────────────────────────┐  │  │
@@ -113,7 +113,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  AWS EC2 g6.4xlarge (or larger)                      │
+│  AWS EC2 g6e.2xlarge (or larger)                      │
 │  ┌───────────────────────────────────────────────┐   │
 │  │  Container: vLLM                              │   │
 │  │  ┌─────────────────────────────────────────┐  │   │
@@ -149,7 +149,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 │  AWS SageMaker Endpoint                               │
 │  ┌───────────────────────────────────────────────┐   │
 │  │  Model: ibm-granite/granite-guardian-4.1-8b   │   │
-│  │  Instance: ml.g6.2xlarge                      │   │
+│  │  Instance: ml.g6e.xlarge                      │   │
 │  │  Inference Component (auto-provisioned)       │   │
 │  └───────────────────────────────────────────────┘   │
 │  Endpoints: HTTPS API (auto-SSL, auto-scaling)       │
@@ -164,7 +164,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 - Supports model artifacts from HuggingFace directly
 
 **Cons:**
-- Higher per-hour cost (~$1.05–$1.25/hr for g6.2xlarge vs ~$0.71/hr on-demand EC2)
+- Higher per-hour cost (~$0.46/hr for g6e.xlarge vs ~$0.46/hr on-demand EC2)
 - Less control over inference engine
 - Cold start times (~2–5 minutes for model loading)
 - Egress costs for data leaving SageMaker
@@ -182,7 +182,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 | **Setup Complexity** | ⭐ (1 command) | ⭐⭐ (container + CUDA) | ⭐⭐⭐ (console/CLI) |
 | **Throughput** | ~50–100 req/s | ~100–200 req/s | ~80–150 req/s |
 | **Per-Request Latency** | 15–40 ms | 20–50 ms | 30–60 ms |
-| **Monthly Cost (g6.2xlarge)** | ~$588 | ~$588 + CUDA deps | ~$767–$905 |
+| **Monthly Cost (g6e.xlarge)** | ~$335 | ~$335 + CUDA deps | ~$472–$630 |
 | **Scaling** | Manual (clone instances) | Dynamic batching | Auto-scaling (AWS managed) |
 | **Operational Overhead** | Low | Medium | Low (managed) |
 | **GGUF Support** | ✅ Native | ❌ FP8/GPTQ only | ✅ via HuggingFace |
@@ -190,7 +190,7 @@ Granite Guardian 4.1 returns a single `yes/no` score (or short reasoning trace i
 
 ---
 
-## 3. Recommended Approach: Containerized llama.cpp on g6.2xlarge (Sweet Spot)
+## 3. Recommended Approach: Containerized llama.cpp on g6e.xlarge (Sweet Spot)
 
 ### Why llama.cpp?
 
@@ -204,7 +204,7 @@ For a **safety classifier** workload, llama.cpp is the optimal choice:
 6. **Lower operational cost** — no PyTorch, no CUDA toolkit, no venv overhead
 7. **Performance is sufficient** — ~50–100 req/s per instance easily handles typical agent traffic
 
-### Recommended Hardware: g6.2xlarge
+### Recommended Hardware: g6e.xlarge
 
 | Spec | Value | Why It Matters |
 |---|---|---|
@@ -212,16 +212,16 @@ For a **safety classifier** workload, llama.cpp is the optimal choice:
 | **vCPU** | 8 (Intel Sapphire Rapids) | Handles pre/post-processing |
 | **RAM** | 32 GiB | Docker, OS, buffer |
 | **Network** | Up to 10 Gbps | Low-latency to gateway |
-| **On-Demand** | ~$0.8048/hr (~$588/mo) | Cost-effective |
-| **Savings Plan (1yr)** | ~$0.56/hr (~$409/mo) | 30% discount |
+| **On-Demand** | ~~$0.46/hr (~~$335/mo) | Cost-effective |
+| **Savings Plan (1yr)** | ~$0.56/hr (~~$233/mo) | 30% discount |
 
-> **Note:** g6.xlarge and g6.2xlarge share the same GPU. Choose g6.2xlarge for its extra CPU/RAM if you plan to run monitoring agents, log collectors, or additional local services on the same host.
+> **Note:** g6.xlarge and g6e.xlarge share the same GPU. Choose g6e.xlarge for its extra CPU/RAM if you plan to run monitoring agents, log collectors, or additional local services on the same host.
 
 ### Deployment Stack
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  AWS EC2 g6.2xlarge  (Amazon Linux 2023)                           │
+│  AWS EC2 g6e.xlarge  (Amazon Linux 2023)                           │
 │                                                                     │
 │  docker-compose.yml                                                 │
 │  ├── granite-guardian (llama.cpp)                                  │
@@ -236,7 +236,7 @@ For a **safety classifier** workload, llama.cpp is the optimal choice:
 │                                                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │  Security:                                                  │   │
-│  │  - Security Group: Only allow 8080 from aw-aiguard proxy    │   │
+│  │  - Security Group: Only allow 8080 from user's IP (/32)    │   │
 │  │  - No public IP (VPC internal only)                         │   │
 │  │  - IAM role with minimal permissions                        │   │
 │  └─────────────────────────────────────────────────────────────┘   │
@@ -254,7 +254,7 @@ If you prefer AWS-managed infrastructure over self-hosting:
 aws sagemaker create-inference-component \
   --inference-component-name granite-guardian-4.1-8b \
   --model-name granite-guardian-4.1-8b \
-  --instance-type ml.g6.2xlarge \
+  --instance-type ml.g6e.xlarge \
   --hardware-volumes [{"MountPath": "/opt/ml/model", "S3Uri": "s3://your-bucket/granite-guardian-4.1-8b/"}]
 
 aws sagemaker create-endpoint-config \
@@ -263,7 +263,7 @@ aws sagemaker create-endpoint-config \
     "VariantName": "variant-1",
     "ModelName": "granite-guardian-4.1-8b",
     "InitialInstanceCount": 1,
-    "InstanceType": "ml.g6.2xlarge",
+    "InstanceType": "ml.g6e.xlarge",
     "ModelDataDownloadTimeoutInSeconds": 600,
     "ContainerStartupHealthCheckTimeoutInSeconds": 900
   }]'
@@ -278,12 +278,12 @@ aws sagemaker create-endpoint \
 
 ## 13. GPU Passthrough Stack — How the Container Talks to the L4
 
-The g6.2xlarge's NVIDIA L4 GPU is **physically available to the host**. Docker with the NVIDIA Container Toolkit is the bridge that exposes it to the container. Without ALL three pieces below, the container runs on CPU.
+The g6e.xlarge's NVIDIA L4 GPU is **physically available to the host**. Docker with the NVIDIA Container Toolkit is the bridge that exposes it to the container. Without ALL three pieces below, the container runs on CPU.
 
 ### The GPU Passthrough Stack
 
 ```
-Physical GPU (NVIDIA L4 on g6.2xlarge)
+Physical GPU (NVIDIA L4 on g6e.xlarge)
     │
     ▼
 Host NVIDIA Display Drivers (Amazon Linux 2023)
@@ -359,51 +359,51 @@ Without both `runtime: nvidia` AND the `deploy.resources.reservations.devices` b
 
 ```bash
 # 1. Create VPC (if not exists)
-aws ec2 create-vpc --cidr-block 10.0.0.0/16 --region us-east-1
+aws ec2 create-vpc --cidr-block 10.0.0.0/16 --region us-east-2
 
 # 2. Create subnet
 aws ec2 create-subnet \
   --vpc-id vpc-xxxxxxxx \
   --cidr-block 10.0.1.0/24 \
-  --availability-zone us-east-1a \
-  --region us-east-1
+  --availability-zone us-east-2a \
+  --region us-east-2
 
-# 3. Create security group (restrict to aw-aiguard gateway IPs)
+# 3. Create security group (restrict to your public IP)
 aws ec2 create-security-group \
   --group-name aw-aiguard-guardian \
   --description "Granite Guardian 4.1 inference server" \
   --vpc-id vpc-xxxxxxxx \
-  --region us-east-1
+  --region us-east-2
 SG_ID=$(aws ec2 describe-security-groups \
   --filters "Name=group-name,Values=aw-aiguard-guardian" \
-  --query "SecurityGroups[0].GroupId" --output text --region us-east-1)
+  --query "SecurityGroups[0].GroupId" --output text --region us-east-2)
 
-# 4. Allow inbound from gateway proxy only (port 8080)
+# 4. Allow inbound from your public IP (port 8080)
+MY_IP=$(curl -s ifconfig.me)
 aws ec2 authorize-security-group-ingress \
   --group-id $SG_ID \
   --protocol tcp \
   --port 8080 \
-  --source-group $(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=aw-aiguard-proxy" \
-    --query "SecurityGroups[0].GroupId" --output text --region us-east-1)
+  --cidr ${MY_IP}/32
 
 # 5. Launch EC2 instance (Amazon Linux 2023)
 aws ec2 run-instances \
   --image-id ami-0c55b159cbfafe1f0 \
-  --instance-type g6.2xlarge \
+  --instance-type g6e.xlarge \
   --count 1 \
   --subnet-id subnet-xxxxxxxx \
   --security-group-ids $SG_ID \
   --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":100,"VolumeType":"gp3"}}]' \
   --tag-specifications '[{"ResourceType":"instance","Tags":[{"Key":"Name","Value":"aw-aiguard-granite-guardian"}]}]' \
-  --region us-east-1
+  --region us-east-2
 ```
 
 #### Step 1.2: Install Docker & NVIDIA Container Toolkit
 
 ```bash
-# SSH into the instance
-ssh -i ~/.ssh/your-key ec2-user@<instance-ip>
+```bash
+# Connect via SSM Session Manager
+aws ssm start-session --target i-<instance-id>
 
 # Install Docker (Amazon Linux 2023)
 sudo yum install -y docker
@@ -712,8 +712,7 @@ curl -s http://<aws-private-ip>:8080/models | python3 -m json.tool
 
 | Direction | Protocol | Port | Source | Purpose |
 |---|---|---|---|---|
-| Inbound | TCP | 8080 | aw-aiguard proxy security group | Model API |
-| Inbound | TCP | 22 | Your bastion/Jump host | SSH access |
+| Inbound | TCP | 8080 | User's public IP (/32) | Model API |
 | Outbound | All | All | 0.0.0.0/0 | HuggingFace download, CloudWatch |
 
 ---
@@ -756,13 +755,13 @@ curl -s http://<aws-private-ip>:8080/models | python3 -m json.tool
 
 ## 7. Cost Analysis & Optimization
 
-### Cost Comparison (Monthly, us-east-1)
+### Cost Comparison (Monthly, us-east-2)
 
 | Option | Instance | On-Demand | Savings Plan (1yr) | Spot |
 |---|---|---|---|---|
-| **llama.cpp** | g6.2xlarge | $588 | $409 | $176–$235 |
-| **vLLM** | g6.2xlarge | $588 | $409 | $176–$235 |
-| **SageMaker** | ml.g6.2xlarge | $767–$905* | N/A | N/A |
+| **llama.cpp** | g6e.xlarge | ~$335 | ~$233 | $176–$235 |
+| **vLLM** | g6e.xlarge | ~$335 | ~$233 | $176–$235 |
+| **SageMaker** | ml.g6e.xlarge | ~$472–$630* | N/A | N/A |
 
 > *SageMaker includes a ~30% premium for managed service. Actual cost varies by region and included features.
 
@@ -772,20 +771,20 @@ curl -s http://<aws-private-ip>:8080/models | python3 -m json.tool
 
 2. **Savings Plans (30% savings):** For predictable workloads, commit to 1-year compute savings plan.
 
-3. **Model Quantization (saves GPU tier):** Q4_K_M fits on g6.xlarge (single L4), avoiding need for g6.4xlarge or multi-GPU setups.
+3. **Model Quantization (saves GPU tier):** Q4_K_M fits on g6.xlarge (single L4), avoiding need for g6e.2xlarge or multi-GPU setups.
 
 4. **Caching (reduces redundant calls):** Implement prompt hashing cache for identical requests within a TTL window. For safety classification, identical prompts within 60 seconds are common during burst traffic.
 
-5. **Right-sizing:** If throughput is under 20 req/s sustained, g6.xlarge is sufficient and saves $200/mo vs g6.2xlarge.
+5. **Right-sizing:** If throughput is under 20 req/s sustained, g6.xlarge is sufficient and saves ~$100/mo vs g6e.xlarge.
 
 ### Recommended Cost Strategy
 
 ```
-Production (business hours):  1× g6.2xlarge on-demand  → ~$588/mo
-Off-hours (22:00–07:00):      Switch to spot            → ~$200/mo (67% savings)
+Production (business hours):  1× g6e.xlarge on-demand  → ~~$335/mo
+Off-hours (22:00–07:00):      Switch to spot            → ~~$100/mo (67% savings)
 Weekends:                     Scale to 0 or spot        → ~$0–$60/mo
 
-Total estimated: ~$600–$750/mo with smart scheduling
+Total estimated: ~~$400–$500/mo with smart scheduling
 ```
 
 ---
@@ -866,9 +865,9 @@ class CachedGuardianGuard(GuardianGuard):
 #### Option A: Single Instance (Small/Medium Scale)
 
 ```
-1× g6.2xlarge (llama.cpp)
+1× g6e.xlarge (llama.cpp)
   ↓
-aw-aiguard proxy gateway (multiple instances)
+aw-aiguard proxy gateway (local)
 ```
 
 - Handles up to ~100 req/s sustained
@@ -878,9 +877,9 @@ aw-aiguard proxy gateway (multiple instances)
 #### Option B: Multi-Instance + Load Balancer (Large Scale)
 
 ```
-            ┌─ g6.2xlarge #1 (llama.cpp) ─┐
-ALB ────────┼─ g6.2xlarge #2 (llama.cpp) ─┼──→ aw-aiguard gateways
-            ┌─ g6.2xlarge #3 (llama.cpp) ─┘
+            ┌─ g6e.xlarge #1 (llama.cpp) ─┐
+ALB ────────┼─ g6e.xlarge #2 (llama.cpp) ─┼──→ aw-aiguard gateways
+            ┌─ g6e.xlarge #3 (llama.cpp) ─┘
 ```
 
 - Handles 300+ req/s
@@ -913,7 +912,7 @@ aws autoscaling create-auto-scaling-group \
   --vpc-zone-identifier subnet-xxxxx \
   --metrics-collection "Granular" \
   --health-check-type ELB \
-  --region us-east-1
+  --region us-east-2
 
 # CloudWatch Alarms for GPU-based scaling
 aws cloudwatch put-metric-alarm \
@@ -1009,7 +1008,7 @@ aws s3 sync /opt/granite-guardian/models/ s3://your-bucket/granite-guardian-mode
         ],
         "period": 60,
         "stat": "Average",
-        "region": "us-east-1",
+        "region": "us-east-2",
         "title": "GPU Metrics"
       }
     },
@@ -1023,7 +1022,7 @@ aws s3 sync /opt/granite-guardian/models/ s3://your-bucket/granite-guardian-mode
         ],
         "period": 60,
         "stat": "Average",
-        "region": "us-east-1",
+        "region": "us-east-2",
         "title": "Guardian Performance"
       }
     }
@@ -1042,7 +1041,7 @@ aws s3 sync /opt/granite-guardian/models/ s3://your-bucket/granite-guardian-mode
 │  Security Group: aw-aiguard-guardian             │
 │  ┌────────────────────────────────────────────┐  │
 │  │  Inbound:                                  │  │
-│  │  - TCP 8080 from aw-aiguard-proxy SG only  │  │
+│  │  - TCP 8080 from user's public IP (/32) only  │  │
 │  │  - TCP 22 from your bastion/Jump host      │  │
 │  │  - ICMP from your CIDR (optional)          │  │
 │  │                                            │  │
@@ -1102,7 +1101,7 @@ aws iam attach-role-policy \
 
 ### Pre-Deployment Checklist
 
-- [ ] EC2 instance provisioned (g6.2xlarge or g6.xlarge)
+- [ ] EC2 instance provisioned (g6e.xlarge or g6.xlarge)
 - [ ] Security group configured (port 8080 restricted to proxy SG)
 - [ ] Docker + NVIDIA Container Toolkit installed
 - [ ] Model GGUF file downloaded and verified (~4.5 GB)
@@ -1119,7 +1118,7 @@ aws iam attach-role-policy \
 
 ```bash
 #!/bin/bash
-# /opt/granite-guardian/verify.sh
+# Run pytest suite: pytest tests/gateway/test_guardrail.py -v
 GUARDIAN_URL="${GUARDIAN_URL:-http://localhost:8080}"
 
 echo "=== Guardian Verification ==="
@@ -1180,7 +1179,7 @@ echo "=== Verification Complete ==="
 |---|---|---|---|
 | **Complexity** | Lowest | Medium | Low (managed) |
 | **Throughput** | Good (50–100 req/s) | Best (100–200 req/s) | Good (80–150 req/s) |
-| **Cost** | Best ($588/mo) | Best ($588/mo) | Higher ($767+/mo) |
+| **Cost** | Best (~$335/mo) | Best (~$335/mo) | Higher ($767+/mo) |
 | **Latency** | Best (15–30 ms) | Good (20–50 ms) | Good (30–60 ms) |
 | **GGUF Support** | ✅ Native | ❌ FP8 only | ✅ via HF |
 | **Operational Overhead** | Low | Medium | Lowest (managed) |
@@ -1191,7 +1190,7 @@ echo "=== Verification Complete ==="
 
 **For aw-aiguard's use case** (safety classifier, moderate throughput, existing Python gateway with minimal code change expectation):
 
-> **Choose: Containerized llama.cpp on g6.2xlarge ($588/mo on-demand, ~$409/mo with Savings Plan)**
+> **Choose: Containerized llama.cpp on g6e.xlarge (~$335/mo on-demand, ~~$233/mo with Savings Plan)**
 
 This gives you:
 - Lowest operational overhead (one container, one command)
@@ -1199,6 +1198,6 @@ This gives you:
 - OpenAI-compatible API (zero gateway code changes)
 - 50–100 req/s throughput (more than sufficient for agent safety classification)
 - 15–30 ms per-request latency (minimal added latency to the safety pipeline)
-- ~$409/mo with 1-year Savings Plan (best price/performance)
+- ~~$233/mo with 1-year Savings Plan (best price/performance)
 
-If your team expects > 200 req/s sustained throughput, or needs auto-scaling without custom infrastructure, switch to vLLM on g6.4xlarge or SageMaker.
+If your team expects > 200 req/s sustained throughput, or needs auto-scaling without custom infrastructure, switch to vLLM on g6e.2xlarge or SageMaker.

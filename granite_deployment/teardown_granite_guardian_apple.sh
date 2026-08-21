@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # ─── Configuration (must match provisioning) ─────────────────────────────────
-REGION="${REGION:-us-east-1}"
+REGION="${REGION:-us-east-2}"
 PROJECT_NAME="${PROJECT_NAME:-aw-aiguard}"
 DRY_RUN="${DRY_RUN:-false}"  # Set to "true" to list resources without deleting
 
@@ -128,9 +128,51 @@ query_instance() {
         --region "$REGION" 2>/dev/null || echo ""
 }
 
+# ─── Step 0: Delete SSM IAM Role ─────────────────────────────────────────────
+destroy_ssm_role() {
+    info "Step 0/8: Deleting SSM IAM role..."
+
+    local role_name="${PROJECT_NAME}-ssm-role"
+
+    # Check if role exists
+    if ! aws iam get-role --role-name "$role_name" --region "$REGION" >/dev/null 2>&1; then
+        info "SSM role '${role_name}' not found — skipping"
+        return 0
+    fi
+
+    if [ "$DRY_RUN" = "true" ]; then
+        info "DRY RUN: would delete SSM role ${role_name}"
+        return 0
+    fi
+
+    # Detach all managed policies
+    local policies
+    policies=$(aws iam list-attached-role-policies \
+        --role-name "$role_name" \
+        --query "AttachedPolicies[*].PolicyArn" \
+        --output text \
+        --region "$REGION" 2>/dev/null || echo "")
+
+    for policy_arn in $policies; do
+        [ -z "$policy_arn" ] || [ "$policy_arn" = "None" ] && continue
+        info "  Detaching policy: ${policy_arn}"
+        aws iam detach-role-policy \
+            --role-name "$role_name" \
+            --policy-arn "$policy_arn" \
+            --region "$REGION" >/dev/null 2>&1 || true
+    done
+
+    # Delete role
+    aws iam delete-role \
+        --role-name "$role_name" \
+        --region "$REGION" >/dev/null 2>&1 || warn "Failed to delete role ${role_name}"
+
+    ok "SSM role deleted: ${role_name}"
+}
+
 # ─── Step 1: Delete EC2 Instance ─────────────────────────────────────────────
 destroy_instance() {
-    info "Step 1/7: Deleting EC2 instance..."
+    info "Step 1/8: Deleting EC2 instance..."
 
     local instance_id
     instance_id=$(query_instance)
@@ -160,9 +202,9 @@ destroy_instance() {
 
 # ─── Step 2: Delete Security Groups ──────────────────────────────────────────
 destroy_security_groups() {
-    info "Step 2/7: Deleting security groups..."
+    info "Step 2/8: Deleting security groups..."
 
-    for sg_name in "guardian" "proxy"; do
+    for sg_name in "guardian"; do
         local sg_id
         sg_id=$(query_security_group "$sg_name")
 
@@ -199,7 +241,7 @@ destroy_security_groups() {
 
 # ─── Step 3: Detach Internet Gateway ─────────────────────────────────────────
 detach_internet_gateway() {
-    info "Step 3/7: Detaching and deleting internet gateway..."
+    info "Step 3/8: Detaching and deleting internet gateway..."
 
     local igw_id
     igw_id=$(query_internet_gateway)
@@ -236,7 +278,7 @@ detach_internet_gateway() {
 
 # ─── Step 4: Delete Route Table ──────────────────────────────────────────────
 destroy_route_table() {
-    info "Step 4/7: Deleting route table..."
+    info "Step 4/8: Deleting route table..."
 
     local rt_id
     rt_id=$(query_route_table)
@@ -282,7 +324,7 @@ destroy_route_table() {
 
 # ─── Step 5: Delete Subnet ───────────────────────────────────────────────────
 destroy_subnet() {
-    info "Step 5/7: Deleting subnet..."
+    info "Step 5/8: Deleting subnet..."
 
     local subnet_id
     subnet_id=$(query_subnet)
@@ -309,7 +351,7 @@ destroy_subnet() {
 
 # ─── Step 6: Disable VPC DNS & Delete VPC ────────────────────────────────────
 destroy_vpc() {
-    info "Step 6/7: Disabling VPC DNS and deleting VPC..."
+    info "Step 6/8: Disabling VPC DNS and deleting VPC..."
 
     local vpc_id
     vpc_id=$(query_vpc)
@@ -347,7 +389,7 @@ destroy_vpc() {
 
 # ─── Step 7: Verify ──────────────────────────────────────────────────────────
 verify_cleanup() {
-    info "Step 7/7: Verifying cleanup..."
+    info "Step 7/8: Verifying cleanup..."
 
     local remaining=0
 
@@ -401,6 +443,7 @@ main() {
     preflight
 
     # Teardown in reverse order of provisioning:
+    # 0. SSM IAM role (detached from instance, safe to delete early)
     # 1. Instance (stops holding SG references)
     # 2. Security groups (can't delete while instance references them)
     # 3. Internet gateway (detach before delete)
@@ -408,6 +451,7 @@ main() {
     # 5. Subnet (must be empty)
     # 6. VPC (must be empty — no subnets, no IGW)
     # 7. Verify
+    destroy_ssm_role
     destroy_instance
     destroy_security_groups
     detach_internet_gateway
