@@ -49,6 +49,8 @@ Confirmed: exactly **one** `LLMProxy(` construction site (`main.py:131`) and **z
 
 ### 2. "Requires approval" tools are hard-blocked, not escalated to HITL
 
+> **STATUS: FIXED (2026-08-21).** `proxy.py` now checks `agency_result.rule_name == "approval_required"` and creates a HITL `PendingRequest` (202 `pending_approval`) instead of returning a flat 403. Depth-exceeded and chain-broken still block. Regression tests: `test_approval_required_action` (202) + `test_depth_exceeded_still_blocks` (403).
+
 `agency_controller.py:116-121` returns `allowed=False` for any tool in `require_approval_for` (`file_write`, `shell_execute`, `email_send`, `commit`, `deploy` per `agency_rules.yaml`). In `proxy.py:384-404`, **any** `allowed=False` from agency → `generate_block_response()`.
 
 Result: these tools get a flat **403 deny**, never the HITL "pause → approve" flow the class docstring promises ("certain tools require explicit HITL approval"). The HITL gate at `proxy.py:407` only runs *if* agency passed, so it never sees these. Intent is "pause for a human"; code does "reject."
@@ -94,7 +96,7 @@ These can't all be true at once: whichever service owns :8000, the other's call 
 ## Recommended order of fixes
 
 1. ~~**Wire the four missing components in `main.py`**~~ — **DONE (2026-08-21)**.
-2. **Make `approval_required` escalate to HITL instead of blocking** — correctness of the security model.
+2. ~~**Make `approval_required` escalate to HITL instead of blocking**~~ — **DONE (2026-08-21)**.
 3. **Resolve the :8000 topology** (verify runtime, then fix the audit `dirname` derivation or the port).
 4. Fix the misleading `block` audit event → `warn`.
 5. Wire provenance depth tracking once the multi-agent path lands.
