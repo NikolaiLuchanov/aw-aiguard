@@ -2,7 +2,7 @@
 
 > Review date: 2026-08-20
 > Scope: `gateway/` (FastAPI proxy + safety layer), `central-service/`, `guardrail-config/`, `LLMProxy` wiring in `main.py`
-> Test status: **654/654 passing** (`./venv/bin/python -m pytest -q`)
+> Test status: **664/664 passing** (`./venv/bin/python -m pytest -q`)
 
 ## Architecture (confirmed)
 
@@ -59,9 +59,30 @@ Result: these tools get a flat **403 deny**, never the HITL "pause → approve" 
 
 ### 3. Audit `event_type="block"` that does not block (misleading trail)
 
+> **STATUS: FIXED (2026-08-21).** `proxy.py` now logs `event_type="warn"` (no
+> `blocked_by`) for thinking-mode advisory flags — the response is delivered, so a
+> "block" event was a false positive. `_get_severity` in `central-service/api_server.py`
+> keeps CRITICAL for `warn` + `thinking_mode_verifier` so alerting is unchanged.
+> Regression tests: `test_thinking_mode_warn_logs_warn_not_block`,
+> `test_thinking_mode_warn_stays_critical`.
+
 `proxy.py:511-520`: when thinking-mode returns `BLOCK`, it logs an audit event with `event_type="block"` / `blocked_by="thinking_mode_verifier"` **but still delivers the response** (by design — it's advisory). Anyone auditing the trail sees a "block" event that had no effect.
 
 **Fix:** use `event_type="warn"` (or carry a `delivered: true` flag) so the audit log isn't self-contradictory.
+
+### 3b. Post-forward response layers read `response.content` (crash) — *discovered while fixing #3*
+
+> **STATUS: FIXED (2026-08-21).** The three post-forward response layers now read
+> the starlette `Response`'s `.body`. Regression test:
+> `test_non_streaming_response_survives_post_forward_layers`. Commit `5841b1a`.
+
+`_handle_standard()` returns a **starlette `Response`** (payload in `.body`), but the
+ingestion sanitizer (4.2), thinking-mode verifier (4.4), and output-control (4.3)
+blocks all read `response.content` (the *httpx* attribute). In production — where
+`main.py` wires all three — the sanitizer block raised `AttributeError` on **every
+non-streaming request** and returned 500 before the response was delivered. The
+thinking-mode block was therefore unreachable (the sanitizer crashed first). No
+existing test caught it: none wired those three components on a non-streaming path.
 
 ---
 
@@ -98,7 +119,7 @@ These can't all be true at once: whichever service owns :8000, the other's call 
 1. ~~**Wire the four missing components in `main.py`**~~ — **DONE (2026-08-21)**.
 2. ~~**Make `approval_required` escalate to HITL instead of blocking**~~ — **DONE (2026-08-21)**.
 3. **Resolve the :8000 topology** (verify runtime, then fix the audit `dirname` derivation or the port).
-4. Fix the misleading `block` audit event → `warn`.
+4. ~~Fix the misleading `block` audit event → `warn`.~~ — **DONE (2026-08-21)**.
 5. Wire provenance depth tracking once the multi-agent path lands.
 
 ## Credential note

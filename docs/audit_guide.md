@@ -1,6 +1,6 @@
 # aw-aiguard: Security Audit Trail Guide
 
-**Version:** 0.2.0 | **Last Updated:** 2026-07-23 | **Phase 5.3**
+**Version:** 0.2.0 | **Last Updated:** 2026-08-21 | **Phase 5.3**
 
 ---
 
@@ -18,7 +18,7 @@ Every audit event is a structured record pushed asynchronously from the gateway 
 | `reason` | string | Optional | Human-readable explanation of the event |
 | `prompt_hash` | string | Optional | SHA-256 hash of the prompt (first 64 hex chars) — used for deduplication without storing raw prompts |
 | `provenance` | object | Optional | Provenance metadata (see `docs/architecture.md` Section 6) |
-| `blocked_by` | string | Optional | The component name that blocked the request (for `block` events) |
+| `blocked_by` | string | Optional | The component name that blocked the request (for `block` events only — advisory `warn` events do not set it) |
 | `request_id` | string | Optional | The HITL request ID (for `pause` and `block` events with HITL involvement) |
 | `details` | object | Optional | Additional context-specific data |
 
@@ -129,7 +129,7 @@ The request triggered a warning but was allowed to proceed.
 | `byoc_engine` | BYOC rule returned `warn` (soft_block) | WARNING |
 | `ingestion_sanitizer` | Dangerous patterns found in response (sanitized) | WARNING |
 | `output_control` | Output control returned `warn` | WARNING |
-| `thinking_mode_verifier` | Thinking-mode Guardian returned `no` (advisory) | WARNING |
+| `thinking_mode_verifier` | Thinking-mode Guardian flagged harmful content (advisory — response IS delivered) | CRITICAL |
 
 ### 2.4 `pause`
 
@@ -160,6 +160,8 @@ def _get_severity(event: AuditEvent) -> str:
             return "CRITICAL"
         if event.component == "output_control":
             return "CRITICAL"
+        if event.component == "thinking_mode_verifier":
+            return "CRITICAL"  # legacy rows pre-2026-08-21; new events use event_type="warn"
         if event.component == "pii_scanner":
             return "HIGH"
         if event.component == "ingestion_sanitizer":
@@ -169,7 +171,7 @@ def _get_severity(event: AuditEvent) -> str:
         return "HIGH"  # hitl_gate blocks, etc.
     if event.event_type == "warn":
         if event.component == "thinking_mode_verifier":
-            return "WARNING"
+            return "CRITICAL"  # Advisory flag: response was delivered, but content was harmful
         if event.component == "output_control":
             return "WARNING"
         if event.component == "function_call_detector":
@@ -645,7 +647,7 @@ cd central-service && docker compose restart
 | `hitl_gate` | HIGH | — |
 | `ingestion_sanitizer` | HIGH | WARNING |
 | `output_control` | CRITICAL | WARNING |
-| `thinking_mode_verifier` | CRITICAL | WARNING |
+| `thinking_mode_verifier` | CRITICAL | CRITICAL |
 
 ---
 
