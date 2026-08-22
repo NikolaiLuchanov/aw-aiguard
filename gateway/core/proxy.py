@@ -511,7 +511,8 @@ class LLMProxy:
             # Phase 4.2: Sanitize ingested content (LLM response → client)
             # Catches injected content the LLM may have generated from poisoned context
             if self.sanitizer and not is_streaming and not isinstance(response, StreamingResponse):
-                response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+                # starlette Response stores its payload in .body (not httpx's .content)
+                response_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else response.body
                 sanitize_result = self.sanitizer.sanitize(response_text, provenance=provenance)
 
                 # Log any dangerous patterns
@@ -545,7 +546,8 @@ class LLMProxy:
                     )
 
                 if self.thinking_verifier.should_run(provenance, action_type):
-                    response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+                    # starlette Response stores its payload in .body (not httpx's .content)
+                    response_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else response.body
 
                     tm_decision, tm_message = await self.thinking_verifier.verify(response_text)
 
@@ -579,7 +581,8 @@ class LLMProxy:
             # Phase 4.3: LLM05 Output Control — validate/escape response before delivery
             # Runs after sanitization (4.2), before client delivery
             if self.output_controller and not is_streaming and not isinstance(response, StreamingResponse):
-                response_text = response.content.decode('utf-8') if isinstance(response.content, bytes) else response.content
+                # starlette Response stores its payload in .body (not httpx's .content)
+                response_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else response.body
                 # Extract tool name from request body for schema lookup
                 tool_name = None
                 if body and isinstance(body, dict):

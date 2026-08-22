@@ -406,6 +406,61 @@ class TestPhase4Integration:
             assert response.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_non_streaming_response_survives_post_forward_layers(self, full_proxy, mock_response):
+        """Regression: post-forward response layers (sanitizer 4.2, thinking-mode 4.4,
+        output control 4.3) must read the starlette Response's .body, not .content.
+        Before the fix these read response.content → AttributeError → 500 on every
+        non-streaming request (live in production via main.py wiring)."""
+        with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            full_proxy.client = mock_client
+            full_proxy.guardian.check_safety = AsyncMock(return_value=SafetyDecision.ALLOW)
+            mock_client.request = AsyncMock(return_value=mock_response)
+
+            # Benign sanitizer (4.2) — proves proxy reads response.body, not .content
+            sanitize_result = MagicMock()
+            sanitize_result.dangerous_patterns = []
+            sanitize_result.stripped_count = 0
+            sanitize_result.cleaned_content = ""
+            full_proxy.sanitizer = MagicMock()
+            full_proxy.sanitizer.sanitize = MagicMock(return_value=sanitize_result)
+
+            # Benign thinking-mode verifier (4.4) — ALLOW, no log
+            tm = MagicMock()
+            tm.should_run = MagicMock(return_value=True)
+            tm.verify = AsyncMock(return_value=(SafetyDecision.ALLOW, "ok"))
+            tm.config = MagicMock()
+            tm.config.log_all = False
+            full_proxy.thinking_verifier = tm
+
+            # Benign output controller (4.3) — content unchanged, not blocked.
+            # _handle_standard copies httpx response.content into the starlette
+            # Response (→ .body), so the starlette body == mock_response.content.
+            oc_result = MagicMock()
+            oc_result.blocked = False
+            oc_result.content = mock_response.content.decode("utf-8")
+            oc_result.schema_errors = []
+            oc_result.byoc_violations = []
+            full_proxy.output_controller = MagicMock()
+            full_proxy.output_controller.validate_response = MagicMock(return_value=oc_result)
+
+            scope = {
+                "type": "http", "method": "POST", "path": "/v1/chat/completions",
+                "headers": [],
+            }
+            body = {"messages": [{"role": "user", "content": "What is 2+2?"}]}
+
+            async def receive():
+                return {"type": "http.request", "body": json.dumps(body).encode()}
+            async def send(msg):
+                pass
+            request = Request(scope, receive, send)
+            response = await full_proxy.forward_request(request)
+
+            # Was 500 (AttributeError: 'Response' object has no attribute 'content') before fix
+            assert response.status_code == 200
+
+    @pytest.mark.asyncio
     async def test_unknown_tool_passes_through(self, full_proxy, mock_response):
         """Unknown tool → passes schema validator (not blocked), goes to agency."""
         with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
