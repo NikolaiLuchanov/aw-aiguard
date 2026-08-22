@@ -38,6 +38,21 @@ class TestSeverityMapping:
         event = AuditEvent(api_key="k", event_type="warn", component="any")
         assert _get_severity(event) == "WARNING"
 
+    def test_thinking_mode_warn_stays_critical(self):
+        """Fix #3: thinking_mode_verifier fires a 'warn' event (response IS
+        delivered, advisory by design), but the severity must remain CRITICAL
+        because the LLM generated harmful content — a serious signal even
+        though it didn't stop the response."""
+        event = AuditEvent(api_key="k", event_type="warn", component="thinking_mode_verifier")
+        assert _get_severity(event) == "CRITICAL"
+
+    def test_other_warn_components_stay_warning(self):
+        """The CRITICAL override is specific to thinking_mode_verifier —
+        other components with 'warn' must remain WARNING."""
+        for comp in ["function_call_detector", "ingestion_sanitizer", "output_control", "schema_validator", "agency_controller"]:
+            event = AuditEvent(api_key="k", event_type="warn", component=comp)
+            assert _get_severity(event) == "WARNING", f"{comp} should be WARNING"
+
     def test_pause_is_notice(self):
         event = AuditEvent(api_key="k", event_type="pause", component="hitl_gate")
         assert _get_severity(event) == "NOTICE"

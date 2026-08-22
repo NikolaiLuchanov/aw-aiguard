@@ -406,6 +406,62 @@ class TestPhase4Integration:
             assert response.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_thinking_mode_warn_logs_warn_not_block(self, full_proxy, mock_response):
+        """Thinking-mode flags harmful content → response IS delivered,
+        but the audit event must be 'warn' (not 'block') with no blocked_by."""
+        from gateway.core.thinking_mode import ThinkingModeVerifier
+        with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            full_proxy.client = mock_client
+            full_proxy.guardian.check_safety = AsyncMock(return_value=SafetyDecision.ALLOW)
+            mock_client.request = AsyncMock(return_value=mock_response)
+
+            # Wire a mock thinking-mode verifier that runs and flags the response
+            tm = MagicMock(spec=ThinkingModeVerifier)
+            tm.should_run = MagicMock(return_value=True)
+            tm.verify = AsyncMock(return_value=(SafetyDecision.BLOCK, "Thinking mode flagged harmful content"))
+            tm.config = MagicMock()
+            tm.config.log_all = False
+            full_proxy.thinking_verifier = tm
+
+            scope = {
+                "type": "http", "method": "POST", "path": "/v1/chat/completions",
+                "headers": [
+                    (b"x-provenance-source-id", b"web-1"),
+                    (b"x-provenance-source-type", b"external_api"),
+                    (b"x-provenance-trust-level", b"0.3"),  # low trust
+                ],
+            }
+            body = {
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "tool_name": "web_search",
+                "parameters": {"query": "math facts"},
+            }
+
+            async def receive():
+                return {"type": "http.request", "body": json.dumps(body).encode()}
+            async def send(msg):
+                pass
+            request = Request(scope, receive, send)
+            response = await full_proxy.forward_request(request)
+
+            # Response is still delivered (advisory, non-blocking)
+            assert response.status_code == 200
+
+            # Audit event must be 'warn', not 'block'.
+            # NOTE: there are TWO thinking_mode_verifier events in this run — the
+            # advisory flag (block/warn) AND a final "allow" log, because line 561
+            # sets component_name="thinking_mode_verifier" which the final ALLOW
+            # log reuses. Filter to the flag event (event_type != "allow").
+            flag_calls = [
+                c for c in full_proxy.audit_logger.log_event.call_args_list
+                if len(c.args) > 2 and c.args[2] == "thinking_mode_verifier" and c.args[1] != "allow"
+            ]
+            assert len(flag_calls) == 1, "expected exactly one thinking_mode flag event (block/warn)"
+            assert flag_calls[0].args[1] == "warn", "event_type must be 'warn', not 'block'"
+            assert flag_calls[0].kwargs.get("blocked_by") is None, "no blocked_by for a delivered response"
+
+    @pytest.mark.asyncio
     async def test_non_streaming_response_survives_post_forward_layers(self, full_proxy, mock_response):
         """Regression: post-forward response layers (sanitizer 4.2, thinking-mode 4.4,
         output control 4.3) must read the starlette Response's .body, not .content.

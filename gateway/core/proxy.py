@@ -552,14 +552,15 @@ class LLMProxy:
                     tm_decision, tm_message = await self.thinking_verifier.verify(response_text)
 
                     if tm_decision == SafetyDecision.BLOCK:
-                        # Thinking mode flagged harmful content — log as critical
-                        # Per advisory design: still deliver response but alert
+                        # Thinking mode flagged harmful content.
+                        # Advisory by design: the response IS delivered — so this is a
+                        # WARNING audit event, NOT a block. (Fix #3, 2026-08-21)
                         await self.audit_logger.log_event(
-                            self.api_key, "block", "thinking_mode_verifier", prompt,
-                            reason=tm_message, blocked_by="thinking_mode_verifier",
+                            self.api_key, "warn", "thinking_mode_verifier", prompt,
+                            reason=tm_message,
                             prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                         ) if self.audit_logger else None
-                        logger.warning("Thinking-mode block: delivering response with WARNING alert.")
+                        logger.warning("Thinking-mode advisory flag: delivering response with WARNING alert.")
                         component_name = "thinking_mode_verifier"  # Override for final log
 
                     elif tm_decision == SafetyDecision.WARNING:

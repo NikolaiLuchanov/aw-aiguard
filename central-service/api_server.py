@@ -84,13 +84,17 @@ def _get_severity(event: AuditEvent) -> str:
             return "HIGH"
         return "HIGH"
     if event.event_type == "warn":
+        if event.component == "thinking_mode_verifier":
+            # Fix #3 (2026-08-21): thinking-mode advisory flag is a 'warn' event
+            # (response IS delivered), but the severity stays CRITICAL — the LLM
+            # generated harmful content, which is a serious signal even though
+            # delivery was not stopped.
+            return "CRITICAL"
         if event.component == "function_call_detector":
             return "WARNING"
         if event.component == "ingestion_sanitizer":
             return "WARNING"
         if event.component == "output_control":
-            return "WARNING"
-        if event.component == "thinking_mode_verifier":
             return "WARNING"
         if event.component == "schema_validator":
             return "WARNING"
