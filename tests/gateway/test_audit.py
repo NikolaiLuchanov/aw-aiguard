@@ -179,3 +179,30 @@ class TestAuditLogger:
         with patch.object(logger._client, "post", mock_post):
             await logger._flush_remaining()
         mock_post.assert_called_once()
+
+    # --- backend_url kwarg (finding #4) ---
+
+    def test_init_explicit_backend_url(self, tmp_path):
+        """Explicit backend_url wins over derivation from base_url."""
+        aud = AuditLogger(
+            base_url="http://localhost:8000/guardian",
+            buffer_path=str(tmp_path / "buf.jsonl"),
+            backend_url="http://central:9999",
+        )
+        assert aud.backend_url == "http://central:9999"
+
+    def test_init_explicit_backend_url_strips_trailing_slash(self, tmp_path):
+        aud = AuditLogger(
+            base_url="http://localhost:8000/guardian",
+            buffer_path=str(tmp_path / "buf.jsonl"),
+            backend_url="http://central:9999/",
+        )
+        assert aud.backend_url == "http://central:9999"
+
+    def test_init_fallback_derivation_when_no_explicit_url(self, tmp_path):
+        """Legacy behavior: dirname(base_url) when backend_url is not given."""
+        aud = AuditLogger(
+            base_url="http://localhost:8000/guardian",
+            buffer_path=str(tmp_path / "buf.jsonl"),
+        )
+        assert aud.backend_url == "http://localhost:8000"

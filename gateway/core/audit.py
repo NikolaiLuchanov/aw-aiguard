@@ -34,8 +34,14 @@ class AuditLogger:
         max_queue_size: int = 1000,
         batch_size: int = 50,
         flush_interval: float = 2.0,
+        backend_url: Optional[str] = None,
     ):
-        self.backend_url = os.path.dirname(base_url).rstrip("/")
+        if backend_url:
+            self.backend_url = backend_url.rstrip("/")
+        else:
+            # Legacy derivation: pre-fix setups derived the backend from
+            # GUARDIAN_URL. main.py warns when this path is taken.
+            self.backend_url = os.path.dirname(base_url).rstrip("/")
         self.buffer_path = os.path.expanduser(buffer_path)
         self.max_queue_size = max_queue_size
         self.batch_size = batch_size
