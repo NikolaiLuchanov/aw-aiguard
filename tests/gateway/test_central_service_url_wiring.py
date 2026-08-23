@@ -42,10 +42,11 @@ PROBE = textwrap.dedent(
 
 def _probe(extra_env=None, drop=()):
     env = {k: v for k, v in os.environ.items() if k not in drop}
-    # Neutralize .env values that would interfere with test assertions.
-    # load_dotenv(override=False) won't override these empty values.
-    for k in ("BYOC_CLOUD_URL", "HITL_CLOUD_URL", "CENTRAL_SERVICE_URL", "GUARDIAN_URL"):
-        env.setdefault(k, "")
+    # Force-neutralize these vars so .env values (loaded by load_dotenv)
+    # cannot leak into the subprocess. extra_env then overrides only the
+    # keys the test actually wants to set.
+    env["BYOC_CLOUD_URL"] = ""
+    env["HITL_CLOUD_URL"] = ""
     if extra_env:
         env.update(extra_env)
     result = subprocess.run(
