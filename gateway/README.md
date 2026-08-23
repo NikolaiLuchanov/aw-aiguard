@@ -54,13 +54,20 @@ The proxy implements a full round-trip flow to ensure security at both ends of t
 9. **Post-Processing**: *(Roadmap v2.0)* Scans the LLM's response for leaked secrets or dangerous content.
 
 ### The `GuardianGuard` Adapter
-The `GuardianGuard` is a robust adapter that mediates between the local proxy and the Cloud Guardian Model Server. It is designed for high reliability and zero-trust.
+The `GuardianGuard` is a robust adapter that mediates between the local proxy and the Granite safety judge (llama.cpp on EC2). It speaks the OpenAI chat-completions wire protocol via `gateway/core/guardian_client.py`.
+
+**Protocol details:**
+- **Request:** OpenAI chat-completions shape with `messages` array (system + user roles), `model` set to `"granite4.1-guardian"`, and optional `think` boolean.
+- **Response:** `choices[0].message.content` containing `<score>yes</score>` or `<score>no</score>`.
+- **Score parser (`parse_score`):** Applies a strict three-tier strategy — XML tag match first, whole-word fallback, `None` (fail-closed) if neither matches. Thinking-mode traces with "yes" in prose won't produce false ALLOWs.
+- **Prompts:** Classification templates live in `guardrail-config/guardian_prompts.yaml` (fast, thinking, function_hallucination modes). The YAML is loaded at startup and interpolated with the user prompt or tool-calls JSON before each request.
+- **Authentication:** Optional `GUARDIAN_API_KEY` env var; when set, the Bearer token is sent on every request.
 
 **Key Functionalities:**
-- **Dialect Translation**: Normalizes requests to the Central Service API and translates various model responses into a strict `yes/no` safety decision.
-- **Circuit Breaking**: Implements a strict 2.0s timeout on all safety checks to prevent LLM latency from killing the user experience.
-- **Provenance Tagging**: When the `warn` strategy is used, it injects the `X-Guard-Status: unverified` header into the cloud request.
-- **Fail-Safe Logic**: Executes the `GUARDIAN_FAIL_STRATEGY` to handle cloud outages without compromising the system.
+- **Dialect Translation:** Normalizes requests to the OpenAI chat-completions format and translates various model responses into a strict `yes/no` safety decision.
+- **Circuit Breaking:** Implements a strict 2.0s timeout on all safety checks to prevent LLM latency from killing the user experience.
+- **Provenance Tagging:** When the `warn` strategy is used, it injects the `X-Guard-Status: unverified` header into the cloud request.
+- **Fail-Safe Logic:** Executes the `GUARDIAN_FAIL_STRATEGY` to handle cloud outages without compromising the system.
 
 ### Fail-Safe Strategies (`GUARDIAN_FAIL_STRATEGY`)
 When the Cloud Guardian service is unreachable (network timeout, server down), the proxy applies one of the following strategies:

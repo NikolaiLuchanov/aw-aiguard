@@ -7,6 +7,7 @@ aw-aiguard/                          # Project root
 │   │   ├── __init__.py              # Module exports
 │   │   ├── proxy.py                 # Reverse proxy with streaming support
 │   │   ├── guardrail.py             # Guardian pre-flight safety adapter (4 fail-safe strategies)
+│   │   ├── guardian_client.py       # Granite wire protocol: build_request, parse_score, load_prompts
 │   │   ├── scanner.py               # PII/Secrets regex + entropy scanner (Sequence A/B/C)
 │   │   ├── hitl.py                  # HITL pause middleware with full request resume flow
 │   │   ├── byoc.py                  # BYOC stop-limits enforcement engine (hard_stop, soft_block)
@@ -43,11 +44,12 @@ aw-aiguard/                          # Project root
 │   ├── function_call_rules.yaml      # Function-call hallucination detection rules (Phase 4.1)
 │   ├── tool_schemas.yaml               # CaMeL JSON schemas for tool parameters (Phase 4.5.1)
 │   ├── camel_rules.yaml                # CaMeL enforcement rules (hard_stop) (Phase 4.5.1)
-│   └── agency_rules.yaml               # Delegation depth & agency constraints (Phase 4.5.2)
+│   ├── agency_rules.yaml               # Delegation depth & agency constraints (Phase 4.5.2)
+│   └── guardian_prompts.yaml         # Granite guardian classification prompts (fast, thinking, function_hallucination)
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 654 pytest unit tests
+├── tests/                            # 690 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
 │   ├── red_team/                     # 85 adversarial test cases (Phase 5.1)
 │   │   ├── test_direct_injection.py  # 14 tests: jailbreak, exfiltration, action hijack, PII
@@ -63,6 +65,7 @@ aw-aiguard/                          # Project root
 │   ├── performance/                  # Performance benchmarks (Phase 5.2)
 │   ├── gateway/                      # Gateway layer tests
 │   │   ├── test_guardrail.py         # GuardianGuard: allow/block/warn/fail-strategies
+│   │   ├── test_guardian_client.py   # Protocol: build_request, parse_score, load_prompts
 │   │   ├── test_scanner.py           # PIIScanner: AWS keys, private keys, email redaction
 │   │   ├── test_hitl.py              # HITLGate: pause/approve/deny/expiry, status
 │   │   ├── test_hitl_cloud.py        # HITL cloud sync, recovery, cleanup loop
@@ -115,12 +118,12 @@ aw-aiguard/                          # Project root
 | **L2** | `guardrail.py` | Guardian pre-flight safety gate (real-time scoring) |
 | **L3** | `function_call_detector.py` | Function-call hallucination detection (Phase 4.1) |
 | **L4** | `byoc.py` | BYOC stop-limits: hard boundaries, organizational policy |
-|| **L4** | `hitl.py` | Human-in-the-loop: pause for irreversible actions |
-|| **L5** | `thinking_mode.py` | Thinking-mode Guardian verification for low-trust/high-risk outputs (Phase 4.4) |
-|| **L6** | *(post-response)* | Thinking-mode Guardian verification for high-risk outputs |
-|| **L6B** | *(post-response)* | OWASP LLM05 output control: schema validation, escaping |
-|| **L5.1** | *(pre-forward)* | CaMeL JSON schema validation for tool parameters (Phase 4.5.1) |
-|| **L5.2** | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.5.2) |
+| **L4** | `hitl.py` | Human-in-the-loop: pause for irreversible actions |
+| **L5** | `thinking_mode.py` | Thinking-mode Guardian verification for low-trust/high-risk outputs (Phase 4.4) |
+| **L6** | *(post-response)* | Thinking-mode Guardian verification for high-risk outputs |
+| **L6B** | *(post-response)* | OWASP LLM05 output control: schema validation, escaping |
+| **L5.1** | *(pre-forward)* | CaMeL JSON schema validation for tool parameters (Phase 4.5.1) |
+| **L5.2** | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.5.2) |
 
 ## Test Count by Module
 
@@ -129,6 +132,7 @@ aw-aiguard/                          # Project root
 | Provenance | `test_provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 23 |
 | PII Scanner | `test_scanner.py` | 14 |
 | Guardian | `test_guardrail.py` | 12 |
+| Guardian Client | `test_guardian_client.py` | 26 | Protocol: build_request, parse_score, load_prompts |
 | Ingestion Sanitizer | `test_sanitizer.py` | 24 |
 | Function-Call Detector | `test_function_call_detector.py` | 17 |
 | BYOC | `test_byoc.py` | 19 |
@@ -145,4 +149,4 @@ aw-aiguard/                          # Project root
 | Agency Controller | `test_agency_controller.py` | 12 |
 | Phase 4.6 Integration | `test_phase4_integration.py` | 10 |
 | Red-Team (Phase 5.1) | 10 test files | 85 |
-| **Total** | | **654** |
+| **Total** | | **690** |

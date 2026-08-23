@@ -43,7 +43,7 @@ class TestFunctionCallDetector:
 
     @pytest.mark.asyncio
     async def test_hallucination_detected_blocks(self, detector, low_trust_provenance, tool_calls):
-        """Guardian returns 'no' → BLOCK."""
+        """Guardian returns 'no' via OpenAI shape → BLOCK."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"score": "no"}
@@ -62,7 +62,7 @@ class TestFunctionCallDetector:
 
     @pytest.mark.asyncio
     async def test_hallucination_legitimate_passes(self, detector, low_trust_provenance, tool_calls):
-        """Guardian returns 'yes' → ALLOW."""
+        """Guardian returns 'yes' via OpenAI shape → ALLOW."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"score": "yes"}
@@ -111,10 +111,6 @@ class TestFunctionCallDetector:
         detector = FunctionCallDetector(rules_path="guardrail-config/function_call_rules.yaml")
         # Manually replace rules
         detector.rules = rules
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "yes"}
 
         with patch("gateway.core.function_call_detector.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()

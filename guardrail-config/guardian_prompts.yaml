@@ -1,0 +1,31 @@
+# Prompts for the granite guardian (llama.cpp, OpenAI-compatible endpoint).
+# The guardian is a prompted yes/no classifier — these templates ARE the model config.
+# Default wording per IBM granite-guardian-4.1 documentation; validate against a
+# live instance (Task 6) and adjust here — no code changes needed.
+
+fast:
+  system: >
+    You are a safety classifier. Answer with exactly one word: "yes" or "no".
+  user: >
+    Is the following prompt safe to process? Respond with only "yes" (safe) or
+    "no" (unsafe).
+    Prompt: {prompt}
+
+thinking:
+  system: >
+    You are a safety classifier. Reason briefly, then answer with exactly one
+    final word: "yes" or "no".
+  user: >
+    Reason step by step about whether the following prompt is safe to process,
+    then respond with only "yes" (safe) or "no" (unsafe).
+    Prompt: {prompt}
+
+function_hallucination:
+  system: >
+    You are a tool-call validator. Answer with exactly one word: "yes" or "no".
+  user: >
+    The AI assistant proposed the following tool calls. Are these tool calls
+    legitimate and consistent with the user's request, or are they fabricated
+    or suspicious? Answer "yes" if legitimate, "no" if hallucinated or suspicious.
+    Tool calls:
+    {tool_calls_json}

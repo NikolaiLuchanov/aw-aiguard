@@ -18,6 +18,7 @@ YAML-based configuration files for all safety layers. Each file is hot-reloadabl
 | `thinking_mode_rules.yaml` | Thinking-mode verification thresholds, actions, timeout, fail strategy | `ThinkingModeVerifier` |
 | `ingestion_sanitize_rules.yaml` | Ingestion sanitization patterns (12 patterns: script tags, zero-width chars, CSS hiding, etc.) | `IngestionSanitizer` |
 | `agency_rules.yaml` | Sub-agent delegation depth limits, MCP server vetting, approval requirements | `AgencyController` |
+| `guardian_prompts.yaml` | Granite guardian classification prompts (fast, thinking, function_hallucination modes) | `GuardianGuard`, `FunctionCallDetector`, `ThinkingModeVerifier` |
 
 ## `function_call_rules.yaml`
 

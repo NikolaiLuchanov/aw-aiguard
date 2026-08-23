@@ -17,13 +17,13 @@ class TestGuardianGuard:
             fail_strategy="block",
         )
 
-    # --- Happy path ---
+    # --- Happy path (OpenAI response shape) ---
 
     @pytest.mark.asyncio
     async def test_check_safety_yes_returns_allow(self, guard):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "yes"}
+        mock_resp.json.return_value = {"choices": [{"message": {"role": "assistant", "content": "<score>yes</score>"}, "finish_reason": "stop"}]}
 
         with patch("gateway.core.guardrail.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
@@ -39,7 +39,7 @@ class TestGuardianGuard:
     async def test_check_safety_no_returns_block(self, guard):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "no"}
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "<score>no</score>"}}]}
 
         with patch("gateway.core.guardrail.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
@@ -53,10 +53,10 @@ class TestGuardianGuard:
 
     @pytest.mark.asyncio
     async def test_check_safety_case_insensitive_score(self, guard):
-        """Score matching is case-insensitive."""
+        """Score matching is case-insensitive (both tag and bare word)."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "YES"}
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "<SCORE>YES</SCORE>"}}]}
 
         with patch("gateway.core.guardrail.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
@@ -73,7 +73,7 @@ class TestGuardianGuard:
         """Unknown score triggers fail-safe strategy."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "maybe"}
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "I cannot determine."}}]}
 
         with patch("gateway.core.guardrail.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
@@ -195,15 +195,15 @@ class TestGuardianGuard:
     # --- Payload shape ---
 
     @pytest.mark.asyncio
-    async def test_payload_contains_prompt_and_model(self, guard):
-        """The POST payload must include 'prompt' and 'model'."""
+    async def test_payload_sends_openai_chat_shape(self, guard):
+        """The POST payload must be OpenAI chat-completions, never {prompt, model}."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"score": "yes"}
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "<score>yes</score>"}}]}
 
         captured_payload = None
 
-        async def capture_post(url, json=None):
+        async def capture_post(url, json=None, headers=None):
             nonlocal captured_payload
             captured_payload = json
             return mock_resp
@@ -217,5 +217,10 @@ class TestGuardianGuard:
 
             await guard.check_safety("my prompt")
 
-        assert captured_payload["prompt"] == "my prompt"
+        assert captured_payload is not None
+        assert "messages" in captured_payload
+        assert captured_payload["messages"][0]["role"] == "system"
+        assert captured_payload["messages"][1]["role"] == "user"
+        assert "prompt" not in captured_payload
+        assert "think" not in captured_payload
         assert captured_payload["model"] == "granite4.1-guardian"
