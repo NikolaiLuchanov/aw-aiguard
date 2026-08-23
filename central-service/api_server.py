@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------------------ #
+# Findings #4 — Configurable port for the central service
+# ------------------------------------------------------------------ #
+CENTRAL_SERVICE_PORT = int(os.getenv("CENTRAL_SERVICE_PORT", "8000"))
+
+
+# ------------------------------------------------------------------ #
 # Initialization
 # ------------------------------------------------------------------ #
 
@@ -576,4 +582,4 @@ async def hitl_pending_by_key(api_key: str, limit: int = 100):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=os.getenv("CENTRAL_SERVICE_HOST", "0.0.0.0"), port=CENTRAL_SERVICE_PORT)
