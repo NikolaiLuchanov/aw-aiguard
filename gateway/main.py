@@ -31,8 +31,9 @@ TARGET_URL = os.getenv("TARGET_API_BASE_URL")
 API_KEY = os.getenv("TARGET_API_KEY")
 PROXY_PORT = int(os.getenv("PROXY_PORT", 9020))
 
-# Guardian Configuration
-GUARDIAN_URL = os.getenv("GUARDIAN_URL", "http://localhost:8000/guardian")
+# Guardian Configuration - REQUIRED (finding #4): no default; the safety
+# judge endpoint differs per environment (dev: llama.cpp :8080/v1/chat/completions, prod: EC2 :8080/v1/chat/completions).
+GUARDIAN_URL = os.getenv("GUARDIAN_URL")
 GUARDIAN_MODEL = os.getenv("GUARDIAN_MODEL", "granite4.1-guardian")
 GUARDIAN_FAIL_STRATEGY = os.getenv("GUARDIAN_FAIL_STRATEGY", "block")
 
@@ -50,16 +51,32 @@ HITL_NOTIFICATION_MODE = os.getenv("HITL_NOTIFICATION_MODE", "silent")
 # BYOC Configuration
 BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "byoc_rules.yaml")
 
-# BYOC Cloud Sync (Phase 3.2)
-BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "")  # e.g. "http://localhost:8000"
+# Central Service (finding #4)
+# ONE env var for ALL central-service traffic: audit ingestion, dashboard,
+# HITL cloud sync, BYOC cloud sync, heartbeat, settings poll. This is a
+# DIFFERENT service from the guardian model - do not derive it from GUARDIAN_URL.
+CENTRAL_SERVICE_URL = os.getenv("CENTRAL_SERVICE_URL", "").rstrip("/")
+if not CENTRAL_SERVICE_URL:
+    # Legacy fallback: pre-fix setups derived the backend from GUARDIAN_URL.
+    # (The old code used GUARDIAN_URL.rsplit("/", 1)[0] for HITL.)
+    # Works only when guardian and backend share a host:port - deprecated.
+    CENTRAL_SERVICE_URL = os.path.dirname(GUARDIAN_URL or "").rstrip("/")
+    print(
+        "WARNING: CENTRAL_SERVICE_URL is not set - falling back to "
+        f"dirname(GUARDIAN_URL) = {CENTRAL_SERVICE_URL}. Set CENTRAL_SERVICE_URL "
+        "in gateway/.env to point at the central service explicitly "
+        "(dev: http://localhost:8000, prod: http://<central-service-ec2-ip>:8000). "
+        "This fallback is deprecated (finding #4)."
+    )
+
+# BYOC Cloud Sync (Phase 3.2) - BYOC_CLOUD_URL is a deprecated per-feature
+# override; defaults to CENTRAL_SERVICE_URL.
+BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "").rstrip("/") or CENTRAL_SERVICE_URL
 BYOC_SYNC_INTERVAL = int(os.getenv("BYOC_SYNC_INTERVAL", "120"))  # seconds
 
-# HITL Cloud Sync (Phase 3.3)
-# Defaults to same parent as GUARDIAN_URL
-if GUARDIAN_URL:
-    HITL_CLOUD_URL = GUARDIAN_URL.rsplit("/", 1)[0] if "/" in GUARDIAN_URL else GUARDIAN_URL
-else:
-    HITL_CLOUD_URL = os.getenv("HITL_CLOUD_URL", "")
+# HITL Cloud Sync (Phase 3.3) - same central-service backend as audit.
+# Previously derived from GUARDIAN_URL via rsplit; now uses CENTRAL_SERVICE_URL.
+HITL_CLOUD_URL = CENTRAL_SERVICE_URL
 
 # Audit Logger Configuration — same Central Service as Guardian
 AUDIT_BUFFER_PATH = os.getenv("AUDIT_BUFFER_PATH", "~/.config/aw-aiguard/audit_buffer.jsonl")
@@ -72,6 +89,9 @@ SETTINGS_POLL_INTERVAL = int(os.getenv("SETTINGS_POLL_INTERVAL", "60"))  # secon
 
 if not TARGET_URL or not API_KEY:
     print("Error: TARGET_API_BASE_URL and TARGET_API_KEY must be set in gateway/.env")
+    exit(1)
+if not GUARDIAN_URL:
+    print("Error: GUARDIAN_URL must be set in gateway/.env (safety judge endpoint, e.g. http://localhost:8080/v1/chat/completions)")
     exit(1)
 
 # Initialize the Guardian Guard
@@ -104,10 +124,11 @@ byoc = BYOCEngine(
     api_key=API_KEY or "default",
 )
 
-# Initialize the Audit Logger
+# Initialize the Audit Logger — explicit central-service backend (finding #4)
 audit_logger = AuditLogger(
-    base_url=GUARDIAN_URL,
+    base_url=GUARDIAN_URL,          # kept for the legacy fallback path only
     buffer_path=AUDIT_BUFFER_PATH,
+    backend_url=CENTRAL_SERVICE_URL,
 )
 
 # Phase 4.4: Initialize the Thinking-Mode Verifier
