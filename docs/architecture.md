@@ -19,7 +19,7 @@ The interactive architecture workflow diagram is available at `architecture_work
 | Component | Technology | Port | Role |
 |---|---|---|---|
 | **Gateway Proxy** | Python / FastAPI | 9020 | Interception, Guardian scoring, PII scanning, HITL pause, LLM05 output control |
-| **Guardian Model** | Cloud-hosted Granite 4.1 | — | Pre-flight safety classification and thinking-mode verification |
+| **Guardian Model** | llama.cpp (Granite 4.1) | 8080 | Pre-flight safety classification via OpenAI-compatible /v1/chat/completions |
 | **Admin Dashboard** | Python (Web Framework) | 8000 (UI) | HITL approvals, BYOC management, settings, audit browser |
 | **Audit Storage** | PostgreSQL + MinIO | 5432 / 9000 | Event logging (hot tier), long-term archive (cold tier) |
 | **Central Service** | Python / FastAPI | 8000 (API) | Audit ingestion, settings sync, alert dispatch, partition lifecycle |

@@ -97,7 +97,8 @@ The gateway proxy is configured via `.env` in the project root. All variables:
 | `TARGET_API_KEY` | Yes | — | Your LLM provider API key (Anthropic/OpenAI) |
 | `TARGET_API_BASE_URL` | Yes | — | LLM provider base URL (e.g., `https://api.openai.com/v1`) |
 | `PROXY_PORT` | No | `9020` | Port for the gateway proxy |
-| `GUARDIAN_URL` | Yes | — | Central Service Guardian endpoint. E.g., `http://localhost:8000/guardian` |
+| `GUARDIAN_URL` | Yes | — | Granite guardian endpoint (OpenAI-compatible /v1/chat/completions). Full endpoint. E.g., `http://<ec2-ip>:8080/v1/chat/completions` |
+| `GUARDIAN_API_KEY` | No | — | API key for the guardian server (llama.cpp --api-key). Empty = no auth. Must match the server's key. |
 | `GUARDIAN_MODEL` | No | `granite4.1-guardian` | Guardian model name |
 | `GUARDIAN_FAIL_STRATEGY` | No | `block` | Fail-safe: `block`, `allow`, `warn`, or `fallback` |
 | `SCAN_SEQUENCE` | No | `B` | Scan order: `A` (Guardian→PII), `B` (PII→Guardian, default), `C` (parallel) |
@@ -105,8 +106,8 @@ The gateway proxy is configured via `.env` in the project root. All variables:
 | `SCAN_ACTION_MODE` | No | `block` | Scanner enforcement: `block` (403 on critical) or `warn` (log only) |
 | `HITL_DEFAULT_TIMEOUT` | No | `300` | HITL approval timeout in seconds |
 | `HITL_NOTIFICATION_MODE` | No | `silent` | HITL response detail: `silent`, `detailed`, or `summary` |
-| `BYOC_CLOUD_URL` | No | — | Central Service URL for BYOC cloud rules sync |
 | `BYOC_SYNC_INTERVAL` | No | `120` | BYOC cloud sync interval in seconds |
+| `CENTRAL_SERVICE_URL` | No | `http://localhost:8000` | Central service API base URL (audit, dashboard, BYOC sync) |
 
 ### 3.2 Configuration Files
 
@@ -205,25 +206,55 @@ The database schema is applied automatically on first startup via `central-servi
 
 ## 5. Guardian Model Server
 
-### 5.1 Local Development
+### 5.1 EC2 Deployment (Granite 4.1 via llama.cpp)
 
-For local development, the Guardian URL (`GUARDIAN_URL`) points to `http://localhost:8000/guardian`. The central service API server acts as a passthrough to a real Guardian instance.
+Granite 4.1 Guardian is IBM's 8B-parameter safety classifier. It runs on AWS EC2 (g6e.xlarge) via `llama.cpp` in Docker, serving the OpenAI-compatible `/v1/chat/completions` endpoint.
 
-### 5.2 Cloud Deployment (Granite 4.1)
-
-Granite 4.1 Guardian is IBM's 8B-parameter safety classification model. Deploy as a containerized instance:
+The `granite_deployment/` directory contains the Docker Compose stack. It includes `provision_granite_guardian_apple.sh` (an EC2 provisioning script for g6e.xlarge instances).
 
 ```bash
-# Example: Containerized Guardian (self-hosted)
-docker run -p 8080:8080 \
-  -e GUARDIAN_MODEL=granite4.1-guardian \
-  guardian-server:latest
+# Start the granite guardian on EC2
+cd granite_deployment
+export GUARDIAN_API_KEY=$(openssl rand -hex 24)
+docker compose up -d
 ```
 
-Set `GUARDIAN_URL` to point to your cloud Guardian instance:
-```bash
-export GUARDIAN_URL=https://guardian.aw-aiguard.cloud/guardian
+The `--api-key ${GUARDIAN_API_KEY}` flag is required in `docker-compose.yml`. Set `GUARDIAN_API_KEY` in `gateway/.env` to match.
+
+### 5.2 Guardian Protocol
+
+Granite Guardian speaks the **OpenAI chat-completions protocol** via `GUARDIAN_URL`. The gateway sends an OpenAI-style request:
+
+```json
+{
+  "model": "granite4.1-guardian",
+  "messages": [
+    {"role": "system", "content": "{fast.prompt from guardian_prompts.yaml}"},
+    {"role": "user", "content": "{prompt}"}
+  ],
+  "max_tokens": 8,
+  "temperature": 0.0
+}
 ```
+
+The response is expected in the standard OpenAI shape:
+
+```json
+{
+  "choices": [{
+    "message": {
+      "content": "<score>yes</score>"
+    }
+  }]
+}
+```
+
+The gateway's `parse_score()` extracts `yes` or `no` from the content, handling:
+- `<score>yes</score>` tags (case-insensitive)
+- Whole-word `yes`/`no` tokens
+- Fail-closed on any unexpected format
+
+Prompt templates are defined in `guardrail-config/guardian_prompts.yaml` (fast, thinking, function_hallucination modes).
 
 ### 5.3 Fail-Safe Strategies
 
@@ -382,15 +413,21 @@ lsof -i :9020
 tail -f gateway/proxy.log
 ```
 
-**Guardian returning blocks:**
+**Guardian unreachable / returning blocks:**
 ```bash
-# Check Guardian connectivity
-curl http://localhost:8000/guardian -d '{"prompt":"hello","model":"test"}'
+# Check Guardian connectivity (OpenAI-compatible endpoint)
+export GUARDIAN_URL=$(grep GUARDIAN_URL .env | cut -d= -f2)
+curl "$GUARDIAN_URL" \
+  -H "Authorization: Bearer ${GUARDIAN_API_KEY:-}" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"granite4.1-guardian","messages":[{"role":"user","content":"hello"}],"max_tokens":8}'
+# Expected: {"choices":[{"message":{"content":"<score>yes</score>"}}}
 
-# Verify GUARDIAN_URL in .env
+# Verify GUARDIAN_URL is set (required, no default)
 grep GUARDIAN_URL .env
 
-# Try fail-open for debugging: set GUARDIAN_FAIL_STRATEGY=allow
+# If the guardian is down, try fail-open for debugging:
+# set GUARDIAN_FAIL_STRATEGY=allow
 ```
 
 **Central service won't start:**

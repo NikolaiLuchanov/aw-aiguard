@@ -14,7 +14,11 @@ TARGET_API_BASE_URL=https://api.openai.com/v1
 PROXY_PORT=9020
 
 # Guardian Configuration (Phase 1.3+)
-GUARDIAN_URL=http://localhost:8000/guardian
+# GUARDIAN_URL is REQUIRED at startup — no default.
+# Dev: http://localhost:8080/v1/chat/completions (local llama.cpp)
+# Prod: http://<ec2-ip>:8080/v1/chat/completions
+GUARDIAN_URL=http://localhost:8080/v1/chat/completions
+GUARDIAN_API_KEY=your_key_here
 GUARDIAN_MODEL=granite4.1-guardian
 GUARDIAN_FAIL_STRATEGY=block
 

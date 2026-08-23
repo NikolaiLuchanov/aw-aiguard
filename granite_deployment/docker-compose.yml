@@ -43,6 +43,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - GUARDIAN_API_KEY=${GUARDIAN_API_KEY}
 
     # ─── llama-server Configuration ───
     # All layers offloaded to GPU (-ngl 99), Q4_K_M model ~4.5 GB VRAM
@@ -57,6 +58,7 @@ services:
       --ubatch-size 256
       --log-disable
       --embedding
+      --api-key ${GUARDIAN_API_KEY}
 
     # ─── Health Check ───
     healthcheck:

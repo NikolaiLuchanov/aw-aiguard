@@ -86,18 +86,20 @@ existing test caught it: none wired those three components on a non-streaming pa
 
 ---
 
-## 🟡 Wiring / topology (needs runtime confirmation)
+## 🟡 Wiring / topology — RESOLVED
 
-### 4. Port / wiring conflict that can't be fully resolved from code alone
+### 4. Port / wiring conflict — **FIXED (2026-08-22)**
 
-- Central-service hardcodes `uvicorn.run(app, host="0.0.0.0", port=8000)` (`api_server.py:575`).
-- `GUARDIAN_URL=http://localhost:8000/guardian` — the granite model's endpoint is *also* on :8000.
-- Central-service has **no** `/guardian` route (grep: only `/audit/*`, `/dashboard/*`, etc.).
-- The audit logger derives its target as `os.path.dirname(GUARDIAN_URL)` = `http://localhost:8000` (`audit.py:38`), then POSTs `/audit/batch`.
+The original finding noted that `GUARDIAN_URL=http://localhost:8000/guardian` conflicted with the central-service also on :8000. This is resolved by the **three-axis config model**:
 
-These can't all be true at once: whichever service owns :8000, the other's call 404s. Either the granite model and central-service are both pointed at :8000 (conflict), or the audit `dirname(GUARDIAN_URL)` derivation is a coincidence that breaks the moment they're on different ports.
+1. **`TARGET_API_BASE_URL`** — Primary LLM (Qwen3.8-27B on `127.0.0.1:8080` via llama.cpp)
+2. **`GUARDIAN_URL`** — Granite Guardian on `:8080/v1/chat/completions` (OpenAI-compatible API) — **required, no default**
+3. **`CENTRAL_SERVICE_URL`** — Central service on `:8000` (audit, dashboard, BYOC sync)
 
-**Open question:** what is actually listening on :8000 in the running setup? Verify the intended topology before trusting audit delivery.
+`GUARDIAN_URL` is no longer derived from the audit logger's `dirname(GUARDIAN_URL)` hack. The audit logger now uses `CENTRAL_SERVICE_URL` for `/audit/batch`. The guardian is a separate service on port 8080, independent of the central-service's port 8000.
+
+Dev topology: `GUARDIAN_URL=http://localhost:8080/v1/chat/completions`
+Prod topology: `GUARDIAN_URL=http://<ec2-ip>:8080/v1/chat/completions`
 
 ### 5. Provenance chain-depth tracking is inert
 
