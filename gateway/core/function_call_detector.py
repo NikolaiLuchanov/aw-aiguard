@@ -6,12 +6,26 @@ are legitimate or injected fabrications.
 
 Granite Guardian: 0.79 BAcc on function-hallucination detection.
 Runs only when: (1) response contains tool calls AND (2) low-trust provenance.
+
+Architecture note:
+  The detector no longer makes HTTP requests. It delegates to the shared
+  GuardianGuard (guardrail.py) which speaks the OpenAI chat-completions
+  protocol via `guardian_client.py`. Two layers of fail strategy:
+
+    - GuardianGuard.fail_strategy (from GUARDIAN_FAIL_STRATEGY env var)
+      governs *transport failures* (network timeout, 5xx, unparseable response).
+
+    - FunctionCallDetector.fail_strategy (from function_call_rules.yaml)
+      governs *decision mapping*: GuardianGuard returns WARNING in audit
+      mode → detector maps to WARNING with rule_name="function_call_hallucination".
+      GuardianGuard returns ALLOW/BLOCK → detector passes through, adding its
+      own rule_name for audit/alert routing.
 """
 
 import json
 import logging
+import os
 import yaml
-import httpx
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -65,13 +79,23 @@ class FunctionCallDetector:
             return {}
 
     def _create_guardian_from_rules(self) -> GuardianGuard:
-        """Create a GuardianGuard instance from loaded rules config."""
-        rules = self.rules
-        fail_strategy = rules.get("fail_strategy", "block")
+        """Create a GuardianGuard instance from environment config.
+
+        The detector does NOT invent an endpoint — it reads GUARDIAN_URL
+        from the environment (required since the topology fix).
+        """
+        url = os.getenv("GUARDIAN_URL")
+        if not url:
+            raise RuntimeError(
+                "FunctionCallDetector: GUARDIAN_URL is not set. "
+                "The topology fix made GUARDIAN_URL required at startup."
+            )
+        fail_strategy = self.rules.get("fail_strategy", "block")
         return GuardianGuard(
-            url="http://localhost:8000/guardian",
-            model="granite4.1-guardian",
+            url=url,
+            model=os.getenv("GUARDIAN_MODEL", "granite4.1-guardian"),
             fail_strategy=fail_strategy,
+            api_key=os.getenv("GUARDIAN_API_KEY", ""),
         )
 
     def should_check(self, tool_calls: List[dict], provenance) -> bool:
@@ -108,14 +132,11 @@ class FunctionCallDetector:
         provenance,
     ) -> FunctionCallCheckResult:
         """
-        Check tool calls for hallucination via Guardian API.
+        Check tool calls for hallucination via the shared GuardianGuard.
 
-        Args:
-            tool_calls: List of {"name": str, "arguments": str} dicts.
-            provenance: Provenance dataclass instance.
-
-        Returns:
-            FunctionCallCheckResult with decision.
+        The detector delegates HTTP to GuardianGuard (guardrail.py), which
+        speaks the OpenAI chat-completions protocol. This method only
+        handles decision mapping and fail-safe logic.
         """
         if not self.should_check(tool_calls, provenance):
             return FunctionCallCheckResult(
@@ -123,54 +144,38 @@ class FunctionCallDetector:
                 message="Skipped: no tool calls or high-trust provenance",
             )
 
-        # Build Guardian payload for function-hallucination check
-        payload = self._build_payload(tool_calls)
-
-        timeout = self.rules.get("timeout_seconds", 5)
+        # Serialize tool calls for the guardian's function-hallucination prompt
+        prompt = self._build_prompt(tool_calls)
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    f"{self.guardian.url}",
-                    json=payload,
+            decision = await self.guardian.check_safety(prompt, think=False)
+
+            if decision == SafetyDecision.ALLOW:
+                return FunctionCallCheckResult(
+                    decision=SafetyDecision.ALLOW,
+                    message="Function calls validated as legitimate",
                 )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    score = data.get("score", "").lower()
-
-                    if score == "yes":
-                        return FunctionCallCheckResult(
-                            decision=SafetyDecision.ALLOW,
-                            message="Function calls validated as legitimate",
-                        )
-                    elif score == "no":
-                        return FunctionCallCheckResult(
-                            decision=SafetyDecision.BLOCK,
-                            rule_name="function_call_hallucination",
-                            message="Guardian flagged tool calls as potentially hallucinated",
-                        )
-
-                logger.warning(
-                    "Guardian API returned unexpected status: %d",
-                    response.status_code,
+            if decision == SafetyDecision.BLOCK:
+                return FunctionCallCheckResult(
+                    decision=SafetyDecision.BLOCK,
+                    rule_name="function_call_hallucination",
+                    message="Guardian flagged tool calls as potentially hallucinated",
                 )
-                return await self._handle_failure()
+            # WARNING (audit mode) - detector maps GuardianGuard's WARNING to
+            # its own WARNING with the rule_name for audit/alert routing
+            return FunctionCallCheckResult(
+                decision=SafetyDecision.WARNING,
+                rule_name="function_call_hallucination",
+                message="Function-call check flagged (audit mode)",
+            )
 
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning("Function-call check failed: %s", str(e))
-            return await self._handle_failure()
         except Exception as e:
             logger.exception("Unexpected error in FunctionCallDetector: %s", str(e))
             return await self._handle_failure()
 
-    def _build_payload(self, tool_calls: List[dict]) -> dict:
-        """Build Guardian API payload for function-hallucination check."""
-        return {
-            "tool_calls": tool_calls,
-            "model": self.guardian.model,
-            "check_type": "function_hallucination",
-        }
+    def _build_prompt(self, tool_calls: List[dict]) -> str:
+        """Serialize tool calls for the guardian's function-hallucination prompt."""
+        return json.dumps(tool_calls, indent=2)
 
     async def _handle_failure(self) -> FunctionCallCheckResult:
         """Fail-safe: applies configured fail_strategy."""
