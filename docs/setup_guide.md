@@ -107,7 +107,8 @@ The gateway proxy is configured via `.env` in the project root. All variables:
 | `HITL_DEFAULT_TIMEOUT` | No | `300` | HITL approval timeout in seconds |
 | `HITL_NOTIFICATION_MODE` | No | `silent` | HITL response detail: `silent`, `detailed`, or `summary` |
 | `BYOC_SYNC_INTERVAL` | No | `120` | BYOC cloud sync interval in seconds |
-| `CENTRAL_SERVICE_URL` | No | `http://localhost:8000` | Central service API base URL (audit, dashboard, BYOC sync) |
+| `BYOC_CLOUD_URL` | No | — | Central service URL for BYOC sync (deprecated; use `CENTRAL_SERVICE_URL` instead) |
+| `CENTRAL_SERVICE_URL` | Yes | — | Central service API base URL (audit, dashboard, BYOC sync). Required. |
 
 ### 3.2 Configuration Files
 
@@ -527,13 +528,13 @@ pytest tests/ --cov=gateway/core --cov=central-service --cov-report=term-missing
 
 ---
 
-## Quick Reference: Environment Transition
+### 5. Quick Start: Environment Transition
 
-The entire system switches between development and production via a single variable:
+The system switches between development and production by setting two environment variables:
 
-| Mode | `GUARDIAN_URL` | Backend URL |
+| Mode | `GUARDIAN_URL` | `CENTRAL_SERVICE_URL` |
 |---|---|---|
-| Dev | `http://localhost:8000/guardian` | `http://localhost:8000` |
-| Prod | `https://api.aw-aiguard.cloud/guardian` | `https://api.aw-aiguard.cloud` |
+| Dev | `http://localhost:8080/v1/chat/completions` | `http://localhost:8000` |
+| Prod | `https://guardian.aw-aiguard.cloud/v1/chat/completions` | `https://api.aw-aiguard.cloud` |
 
-The backend URL is derived as `os.path.dirname(GUARDIAN_URL)`, so a single change covers both Guardian scoring and audit/backend requests.
+Both `GUARDIAN_URL` and `CENTRAL_SERVICE_URL` must be set explicitly.

@@ -194,7 +194,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Created `tests/red_team/` directory with 10 test files covering all 4 attack goals
     - 85 adversarial test cases: direct injection (14), indirect injection (14), masking techniques (11), exfiltration (8), action hijack (7), quiet commands (6), answer manipulation (5), lethal trifecta (5), delegation chains (5), integration pipeline (6)
     - All attacks blocked/paused by appropriate safety layers. Zero false positives.
-    - Total test suite: 654 tests (569 existing + 85 new)
+    - Total test suite: **690+ unit tests** covering all safety layers and all Phase 3+ features.
     - Report: `docs/red_team_report.md`
 |- [ ] **5.2 Performance Optimization**
     - Tune Guardian HTTP latency and FastAPI middleware to minimize round-trips between local proxy and cloud backend.

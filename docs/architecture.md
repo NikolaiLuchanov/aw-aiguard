@@ -35,7 +35,7 @@ Client → Gateway Proxy (9020) → Central Service (8000) → LLM Cloud API
     │          └─ Alert fired  → Telegram/Slack/Email      │
 ```
 
-Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 10-layer security pipeline. The entire system is controlled by one environment variable: `GUARDIAN_URL`.
+Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 10-layer security pipeline. The system requires two environment variables: `GUARDIAN_URL` (safety judge endpoint) and `CENTRAL_SERVICE_URL` (central service API for audit, dashboard, and BYOC sync).
 
 ---
 
@@ -555,7 +555,7 @@ mcp_server_vetting:
 | `TARGET_API_KEY` | (required) | LLM provider API key |
 | `TARGET_API_BASE_URL` | (required) | LLM provider base URL |
 | `PROXY_PORT` | `9020` | Gateway proxy port |
-| `GUARDIAN_URL` | (required) | Central Service Guardian endpoint |
+| `GUARDIAN_URL` | (required) | Granite guardian endpoint (OpenAI-compatible /v1/chat/completions) |
 | `GUARDIAN_MODEL` | `granite4.1-guardian` | Guardian model name |
 | `GUARDIAN_FAIL_STRATEGY` | `block` | Fail-safe: block/allow/warn/fallback |
 | `SCAN_SEQUENCE` | `B` | Scan order: A/B/C |
@@ -563,7 +563,7 @@ mcp_server_vetting:
 | `SCAN_ACTION_MODE` | `block` | Scanner enforcement: block or warn |
 | `HITL_DEFAULT_TIMEOUT` | `300` | HITL approval timeout (seconds) |
 | `HITL_NOTIFICATION_MODE` | `silent` | HITL response detail level |
-| `BYOC_CLOUD_URL` | — | Central Service URL for BYOC sync |
+| `BYOC_CLOUD_URL` | No | — | Central service URL for BYOC sync (deprecated; use `CENTRAL_SERVICE_URL` instead) |
 | `BYOC_SYNC_INTERVAL` | `120` | BYOC cloud sync interval (seconds) |
 
 ### 10.2 YAML Configuration Files
@@ -628,12 +628,11 @@ chmod +x run-gateway-dev.sh && ./run-gateway-dev.sh
 
 ### 11.2 Production Mode
 
-Switch to production via `GUARDIAN_URL`:
+Switch to production by setting both environment variables:
 ```bash
-export GUARDIAN_URL=https://guardian.aw-aiguard.cloud/guardian
+export GUARDIAN_URL=https://guardian.aw-aiguard.cloud/v1/chat/completions
+export CENTRAL_SERVICE_URL=https://api.aw-aiguard.cloud
 ```
-
-Backend URL is derived automatically as `os.path.dirname(GUARDIAN_URL)`.
 
 ### 11.3 Docker Compose Services
 

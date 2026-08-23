@@ -145,6 +145,8 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `central_service/test_hitl_endpoints.py` — Cloud-persisted HITL bridge endpoints: POST /hitl/approve, GET /hitl/decision, GET /hitl/recover, GET /hitl/recover/pending (14 tests)
 - `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
 
+- Total test suite: **690+ unit tests** covering all safety layers and all Phase 3+ features.
+
 ## 🧪 Testing
 
 Run the full suite:
@@ -153,7 +155,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All 394 tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All **690+** tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 
