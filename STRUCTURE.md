@@ -49,7 +49,7 @@ aw-aiguard/                          # Project root
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 690 pytest unit tests
+├── tests/                            # 730 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
 │   ├── red_team/                     # 85 adversarial test cases (Phase 5.1)
 │   │   ├── test_direct_injection.py  # 14 tests: jailbreak, exfiltration, action hijack, PII
@@ -149,4 +149,4 @@ aw-aiguard/                          # Project root
 | Agency Controller | `test_agency_controller.py` | 12 |
 | Phase 4.6 Integration | `test_phase4_integration.py` | 10 |
 | Red-Team (Phase 5.1) | 10 test files | 85 |
-| **Total** | | **690** |
+| **Total** | | **730** |

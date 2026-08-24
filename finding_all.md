@@ -2,7 +2,7 @@
 
 > Review date: 2026-08-20
 > Scope: `gateway/` (FastAPI proxy + safety layer), `central-service/`, `guardrail-config/`, `LLMProxy` wiring in `main.py`
-> Test status: **664/664 passing** (`./venv/bin/python -m pytest -q`)
+> Test status: **730/730 passing** (`./venv/bin/python -m pytest -q`)
 
 ## Architecture (confirmed)
 
