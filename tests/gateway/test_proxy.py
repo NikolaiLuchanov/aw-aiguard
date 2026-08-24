@@ -299,6 +299,7 @@ class TestLLMProxy:
 
         with patch("gateway.core.proxy.httpx.AsyncClient") as MockClient:
             proxy.client = AsyncMock()
+            proxy.client.build_request = MagicMock()  # sync method — don't use AsyncMock
             guardian.check_safety = AsyncMock(return_value=SafetyDecision.ALLOW)
 
             mock_response = MagicMock()
