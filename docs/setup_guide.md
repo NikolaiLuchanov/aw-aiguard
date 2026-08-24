@@ -619,13 +619,14 @@ pytest tests/ --cov=gateway/core --cov=central-service --cov-report=term-missing
 
 ## Port Reference
 
-| Port | Service | Protocol | Default Address |
-|---|---|---|---|
-| 9020 | Gateway Proxy | HTTP | `localhost:9020` |
-| 8000 | Central Service API | HTTP | `localhost:8000` |
-| 5432 | PostgreSQL | TCP | `localhost:5432` (Docker) |
-| 9000 | MinIO API | HTTP | `localhost:9000` (Docker) |
-| 9001 | MinIO Console | HTTP | `localhost:9001` (Docker) |
+|| Port | Service | Protocol | Default Address |
+||---|---|---|---|
+|| 9020 | Gateway Proxy | HTTP | `localhost:9020` |
+|| 8080 | Guardian Model (llama.cpp) | HTTP | `localhost:8080/v1/chat/completions` (dev) / `<granite-ec2-public-ip>` (prod) |
+|| 8000 | Central Service API | HTTP | `localhost:8000` |
+|| 5432 | PostgreSQL | TCP | `localhost:5432` (Docker) |
+|| 9000 | MinIO API | HTTP | `localhost:9000` (Docker) |
+|| 9001 | MinIO Console | HTTP | `localhost:9001` (Docker) |
 
 ---
 

@@ -575,7 +575,7 @@ mcp_server_vetting:
 | `SCAN_ACTION_MODE` | `block` | Scanner enforcement: block or warn |
 | `HITL_DEFAULT_TIMEOUT` | `300` | HITL approval timeout (seconds) |
 | `HITL_NOTIFICATION_MODE` | `silent` | HITL response detail level |
-| `BYOC_CLOUD_URL` | No | — | Central service URL for BYOC sync (deprecated; use `CENTRAL_SERVICE_URL` instead) |
+|| `BYOC_CLOUD_URL` | — | Central service URL for BYOC sync (deprecated; use `CENTRAL_SERVICE_URL` instead) |
 | `BYOC_SYNC_INTERVAL` | `120` | BYOC cloud sync interval (seconds) |
 
 ### 10.2 YAML Configuration Files

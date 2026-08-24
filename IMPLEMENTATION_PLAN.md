@@ -247,7 +247,7 @@ The Gateway Proxy is designed to be stateless. It uses **two independent environ
 
 ## 🧪 Testing
 
-### Pytest Test Suite — 569 Unit Tests
+### Pytest Test Suite — 690 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
 
