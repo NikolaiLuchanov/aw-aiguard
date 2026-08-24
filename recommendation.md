@@ -262,32 +262,43 @@ For a **post-response** filter:
 ### Concrete Setup
 
 ```python
-import requests
+import httpx
 
-def check_guardian(text, think_mode=False):
-    """Send text to the cloud Guardian server for scoring."""
-    import requests
-    response = requests.post(
-        GUARDIAN_URL,
-        json={"prompt": text, "model": "granite4.1-guardian", "think": think_mode}
-    )
-    # Parse {"score": "yes"} or {"score": "no"} from response
-    return response.json().get("score") == "yes"
+async def check_guardian(text: str, think_mode: bool = False) -> bool:
+    """Send text to the cloud Guardian server for scoring via OpenAI /v1/chat/completions."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.post(
+            GUARDIAN_URL,
+            json={
+                "model": "granite4.1-guardian",
+                "messages": [
+                    {"role": "system", "content": "You are a safety classifier. Respond with <score>yes</score> if safe, <score>no</score> if unsafe."},
+                    {"role": "user", "content": text},
+                ],
+                "max_tokens": 8,
+                "temperature": 0.0,
+            },
+        )
+    # Parse <score>yes</score> or <score>no</score> from choices[0].message.content
+    content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    import re
+    m = re.search(r"<score>(yes|no)</score>", content, re.IGNORECASE)
+    return m is not None and m.group(1).lower() == "yes"
 
-def alert_channel(text, channel="email"):  # or "slack" / "telegram"
+async def alert_channel(text: str, channel: str = "email"):  # or "slack" / "telegram"
     if channel == "email":
          ...   # SMTP/SendGrid/Resend call
     elif channel == "slack":
-        requests.post("https://hooks.slack.com/.../YOUR-HOOK", json={"text": text})
+        await httpx.AsyncClient().post("https://hooks.slack.com/.../YOUR-HOOK", json={"text": text})
     elif channel == "telegram":
-        requests.post(
+        await httpx.AsyncClient().post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             json={"chat_id": CHAT_ID, "text": text}
         )
 
 # Usage — pre-flight gate with fast mode
-if not check_guardian(llm_output, think_mode=False):
-    alert_channel(f"⚠️ Guardrail FAIL (fast mode):\n{llm_output[:500]}", channel="slack")
+if not await check_guardian(llm_output, think_mode=False):
+    await alert_channel(f"⚠️ Guardrail FAIL (fast mode):\n{llm_output[:500]}", channel="slack")
 ```
 
 ### Recommended Alert Thresholds
@@ -313,7 +324,7 @@ The key advantage: Guardian's `no` score is programmatically parseable — it's 
 
 ## Testing & Verification
 
-### Pytest Test Suite — 569 Unit Tests
+### Pytest Test Suite — 730 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
 

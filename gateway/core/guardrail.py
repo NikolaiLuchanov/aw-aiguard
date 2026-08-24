@@ -36,8 +36,15 @@ class GuardianGuard:
         self.model = model
         self.fail_strategy = fail_strategy.lower()
         self.api_key = api_key
-        self.timeout = httpx.Timeout(2.0)        # fast mode
-        self.thinking_timeout = httpx.Timeout(30.0)  # thinking mode (Phase 4.4)
+        # Timeout defaults are env-tunable for remote EC2 deployment.
+        # Raise GUARDIAN_TIMEOUT for cross-internet latency (default: 2.0s).
+        # Raise GUARDIAN_THINKING_TIMEOUT for thinking mode (default: 30.0s).
+        self.timeout = httpx.Timeout(
+            float(os.getenv("GUARDIAN_TIMEOUT", "2.0"))
+        )
+        self.thinking_timeout = httpx.Timeout(
+            float(os.getenv("GUARDIAN_THINKING_TIMEOUT", "30.0"))
+        )
         self._prompts = self._load_prompts(prompts_path)
 
     def _load_prompts(self, path: Optional[str]) -> Dict:

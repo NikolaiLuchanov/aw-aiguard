@@ -101,6 +101,8 @@ The gateway proxy is configured via `.env` in the project root. All variables:
 | `GUARDIAN_API_KEY` | No | — | API key for the guardian server (llama.cpp --api-key). Empty = no auth. Must match the server's key. |
 | `GUARDIAN_MODEL` | No | `granite4.1-guardian` | Guardian model name |
 | `GUARDIAN_FAIL_STRATEGY` | No | `block` | Fail-safe: `block`, `allow`, `warn`, or `fallback` |
+| `GUARDIAN_TIMEOUT` | No | `2.0` | Fast-mode timeout in seconds. Raise for remote EC2 deployment (e.g. `5.0`). |
+| `GUARDIAN_THINKING_TIMEOUT` | No | `30.0` | Thinking-mode timeout in seconds. Raise for remote EC2 deployment. |
 | `SCAN_SEQUENCE` | No | `B` | Scan order: `A` (Guardian→PII), `B` (PII→Guardian, default), `C` (parallel) |
 | `SCAN_REDACTION_MODE` | No | `token` | PII redaction mode: `token` or `mask` |
 | `SCAN_ACTION_MODE` | No | `block` | Scanner enforcement: `block` (403 on critical) or `warn` (log only) |

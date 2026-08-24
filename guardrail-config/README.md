@@ -28,6 +28,6 @@ Configuration for the function-call hallucination detector (Phase 4.1).
 |---|---|---|---|
 | `low_trust_threshold` | float | 0.5 | Trust level below which detector activates |
 | `fail_strategy` | string | "block" | Fail-safe strategy: block/allow/warn/fallback |
-| `timeout_seconds` | int | 5 | Timeout for Guardian function-hallucination check |
+| `timeout_seconds` | int | 5 | Timeout for Guardian function-hallucination check (NOTE: inherited from GuardianGuard via `GUARDIAN_TIMEOUT` env var, not read per-layer) |
 | `tool_overrides` | object | {} | Per-tool enforcement overrides (`enforce: true`) |
 | `min_confidence` | float | 0.3 | Minimum confidence threshold |

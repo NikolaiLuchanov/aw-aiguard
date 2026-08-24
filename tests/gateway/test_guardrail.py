@@ -224,3 +224,18 @@ class TestGuardianGuard:
         assert "prompt" not in captured_payload
         assert "think" not in captured_payload
         assert captured_payload["model"] == "granite4.1-guardian"
+
+    # --- Timeout tuning (env var overrides) ---
+
+    @pytest.mark.asyncio
+    async def test_timeout_from_env_override(self, monkeypatch):
+        """GUARDIAN_TIMEOUT env var overrides the default 2.0s fast-mode timeout."""
+        monkeypatch.setenv("GUARDIAN_TIMEOUT", "5.0")
+        guard = GuardianGuard("http://x", "m", "block")
+        assert guard.timeout.connect == 5.0
+
+    @pytest.mark.asyncio
+    async def test_timeout_default(self, monkeypatch):
+        """Without GUARDIAN_TIMEOUT, the default is 2.0s."""
+        guard = GuardianGuard("http://x", "m", "block")
+        assert guard.timeout.connect == 2.0

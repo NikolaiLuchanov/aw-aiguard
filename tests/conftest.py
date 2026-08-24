@@ -264,19 +264,23 @@ def mock_settings_yaml(tmp_path):
 
 @pytest.fixture
 def mock_guardian_response_yes():
-    """Mock Guardian API returning score=yes (ALLOW)."""
+    """Mock Guardian API returning score=yes (ALLOW) in OpenAI chat-completions shape."""
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {"score": "yes"}
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "<score>yes</score>"}}]
+    }
     return mock_response
 
 
 @pytest.fixture
 def mock_guardian_response_no():
-    """Mock Guardian API returning score=no (BLOCK)."""
+    """Mock Guardian API returning score=no (BLOCK) in OpenAI chat-completions shape."""
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {"score": "no"}
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "<score>no</score>"}}]
+    }
     return mock_response
 
 
@@ -285,7 +289,9 @@ def mock_guardian_response_error():
     """Mock Guardian API returning non-200."""
     mock_response = MagicMock()
     mock_response.status_code = 500
-    mock_response.json.return_value = {"error": "internal"}
+    mock_response.json.return_value = {
+        "choices": [], "error": {"message": "internal error"}
+    }
     return mock_response
 
 

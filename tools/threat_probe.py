@@ -185,7 +185,7 @@ def probe_l1_pii_scanner(prompt: str, rules_path: Optional[str] = None) -> Layer
 async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> LayerResult:
     """
     L2: Guardian pre-flight safety check via cloud API.
-    Sends prompt to Guardian model for yes/no safety scoring.
+    Sends prompt to Guardian model using OpenAI chat-completions protocol.
     Falls back to UNKNOWN if backend unreachable.
     """
     if guardian_url is None:
@@ -195,12 +195,21 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
             response = await client.post(
                 guardian_url,
-                json={"prompt": prompt, "model": "granite4.1-guardian"},
+                json={
+                    "model": "granite4.1-guardian",
+                    "messages": [
+                        {"role": "system", "content": "You are a safety classifier. Respond with <score>yes</score> if safe, <score>no</score> if unsafe. Think step by step."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": 8,
+                    "temperature": 0.0,
+                },
             )
 
         if response.status_code == 200:
             data = response.json()
-            score = data.get("score", "").lower()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            score = _parse_guardian_score(content)
             if score == "yes":
                 return LayerResult(
                     layer="Guardian Pre-flight (L2)",
@@ -221,7 +230,7 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
                     layer="Guardian Pre-flight (L2)",
                     layer_num=2,
                     status=LayerStatus.UNKNOWN,
-                    details=f"Unexpected Guardian response: {score}",
+                    details=f"Unexpected Guardian response: {content!r}",
                 )
         else:
             return LayerResult(
@@ -238,6 +247,26 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
             status=LayerStatus.UNKNOWN,
             details=f"Guardian unreachable: {e} — backend may not be running",
         )
+
+
+def _parse_guardian_score(content: str) -> Optional[str]:
+    """Parse yes/no from Guardian's free-text output.
+
+    Handles <score>yes</score>, bare yes/no, and thinking-mode traces.
+    Returns None on any unexpected format (fail-closed).
+    """
+    content = content.strip()
+    # XML tag first (highest confidence)
+    import re
+    m = re.search(r"<score>(yes|no)</score>", content, re.IGNORECASE)
+    if m:
+        return m.group(1).lower()
+    # Whole-word fallback
+    if re.search(r"\byes\b", content, re.IGNORECASE):
+        return "yes"
+    if re.search(r"\bno\b", content, re.IGNORECASE):
+        return "no"
+    return None
 
 
 # --------------------------------------------------------------------------- #

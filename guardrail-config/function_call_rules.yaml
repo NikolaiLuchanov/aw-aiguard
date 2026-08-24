@@ -14,7 +14,11 @@ low_trust_threshold: 0.5
 # Options: block (default, production-safe), allow, warn, fallback
 fail_strategy: "block"
 
-# Timeout for Guardian function-hallucination check (seconds)
+# Timeout for Guardian function-hallucination check (seconds).
+# NOTE: This value is documented but NOT currently read by FunctionCallDetector.
+# The detector delegates to GuardianGuard which uses GUARDIAN_TIMEOUT /
+# GUARDIAN_THINKING_TIMEOUT env vars (default: 2.0s / 30.0s).
+# This YAML key is kept for future use when per-layer timeouts are implemented.
 timeout_seconds: 5
 
 # Tool-level overrides: per-tool configuration

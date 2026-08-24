@@ -21,6 +21,8 @@ GUARDIAN_URL=http://localhost:8080/v1/chat/completions
 GUARDIAN_API_KEY=your_key_here
 GUARDIAN_MODEL=granite4.1-guardian
 GUARDIAN_FAIL_STRATEGY=block
+GUARDIAN_TIMEOUT=2.0
+GUARDIAN_THINKING_TIMEOUT=30.0
 
 # PII & Secrets Scanner (Phase 1.4+)
 SCAN_SEQUENCE=B
@@ -69,7 +71,7 @@ The `GuardianGuard` is a robust adapter that mediates between the local proxy an
 
 **Key Functionalities:**
 - **Dialect Translation:** Normalizes requests to the OpenAI chat-completions format and translates various model responses into a strict `yes/no` safety decision.
-- **Circuit Breaking:** Implements a strict 2.0s timeout on all safety checks to prevent LLM latency from killing the user experience.
+- **Circuit Breaking:** Implements a tunable timeout (default: 2.0s fast mode, 30.0s thinking mode; override via `GUARDIAN_TIMEOUT` / `GUARDIAN_THINKING_TIMEOUT` env vars) on all safety checks to prevent LLM latency from killing the user experience.
 - **Provenance Tagging:** When the `warn` strategy is used, it injects the `X-Guard-Status: unverified` header into the cloud request.
 - **Fail-Safe Logic:** Executes the `GUARDIAN_FAIL_STRATEGY` to handle cloud outages without compromising the system.
 
