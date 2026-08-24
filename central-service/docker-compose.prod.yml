@@ -1,0 +1,89 @@
+version: "3.9"
+
+# Production Docker Compose for Central Service
+# Runs on EC2: PostgreSQL, MinIO, API server — no port exposure to localhost
+# Access via AWS SSM tunnel or security group rules only
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aw-aiguard-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aw_aiguard
+      POSTGRES_USER: aiguard
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiguard -d aw_aiguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No ports exposed — accessed only by api_server container
+    networks:
+      - aw-aiguard-internal
+
+  minio:
+    image: minio/minio:latest
+    container_name: aw-aiguard-minio-prod
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aiguard}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No ports exposed — accessed only by api_server container
+    networks:
+      - aw-aiguard-internal
+
+  api_server:
+    build:
+      context: ..
+      dockerfile: central-service/Dockerfile
+    container_name: aw-aiguard-api-prod
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://aiguard:${PG_PASSWORD:-}@postgres:5432/aw_aiguard
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-aiguard}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-}
+      - AUDIT_TTL_DAYS=30
+      - CENTRAL_SERVICE_PORT=8000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ../guardrail-config:/app/guardrail-config:ro
+    # Port 8000 exposed only on 127.0.0.1 (localhost of the EC2 instance)
+    # Accessed by the Gateway Proxy via EC2 private IP, not public internet
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - aw-aiguard-internal
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  aw-aiguard-internal:
+    driver: bridge

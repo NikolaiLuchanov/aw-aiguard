@@ -5,7 +5,16 @@ gateway.main constructs the single LLMProxy used in production. This test
 asserts that the four Phase-4 security components are actually injected,
 so a future refactor that drops a kwarg fails loudly instead of silently
 disabling a security layer.
+
+NOTE: Env vars MUST be set before importing gateway.main (which calls exit(1)
+on missing vars).
 """
+
+import os
+os.environ.setdefault("CENTRAL_SERVICE_URL", "http://localhost:8000")
+os.environ.setdefault("GUARDIAN_URL", "http://localhost:8080/v1/chat/completions")
+os.environ.setdefault("TARGET_API_KEY", "test-key")
+os.environ.setdefault("TARGET_API_BASE_URL", "https://api.openai.com/v1")
 
 import main as gateway_main
 

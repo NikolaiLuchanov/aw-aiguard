@@ -606,8 +606,10 @@ All incidents should be documented:
 
 **If Guardian service is down:**
 ```bash
-# Check Guardian connectivity
-curl http://localhost:8000/guardian
+# Check Guardian connectivity (correct endpoint)
+curl "http://localhost:8080/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"granite4.1-guardian","messages":[{"role":"user","content":"hello"}],"max_tokens":8}'
 
 # If unreachable, change fail strategy to allow (temporary)
 # Edit .env: GUARDIAN_FAIL_STRATEGY=allow

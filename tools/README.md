@@ -43,7 +43,7 @@ python tools/threat_probe.py --file attack_vectors.txt
 
 # Specify custom Guardian backend
 python tools/threat_probe.py "test prompt" \
-  --guardian-url http://localhost:8000/guardian
+  --guardian-url http://localhost:8080/v1/chat/completions
 
 # Test with low-trust provenance headers (simulates untrusted data source)
 python tools/threat_probe.py "test prompt" \
@@ -60,7 +60,7 @@ python tools/threat_probe.py "test" --quiet
 
 | Variable | Default | Description |
 |---|---|---|
-| `GUARDIAN_URL` | `http://localhost:8000/guardian` | Guardian API endpoint for L2 scoring |
+| `GUARDIAN_URL` | `http://localhost:8080/v1/chat/completions` | Guardian API endpoint for L2 scoring |
 | `BYOC_RULES_PATH` | `./guardrail-config/byoc_rules.yaml` | Path to BYOC rules |
 | `SCAN_RULES_PATH` | `./guardrail-config/scan_rules.yaml` | Path to PII/secret scan rules |
 

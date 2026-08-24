@@ -222,10 +222,17 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 ## 🛠️ Technical Summary & Internal Communication
 **Internal Flow:** `Client` $\rightleftharpoons$ `Gateway Proxy (9020)` $\rightleftharpoons$ `Central Service (8000/Cloud)` $\rightleftharpoons$ `LLM Cloud API`.
 
-**Dev $\rightarrow$ Prod Transition:**
-The Gateway Proxy is designed to be stateless. The switch from local development to cloud production is handled exclusively via the `GUARDIAN_URL` environment variable. The audit/backend URL is derived as `os.path.dirname(GUARDIAN_URL)`, so a single change covers both:
-- Dev: `GUARDIAN_URL=http://localhost:8000/guardian` → backend resolves to `http://localhost:8000`
-- Prod: `GUARDIAN_URL=https://api.aw-aiguard.cloud/guardian` → backend resolves to `https://api.aw-aiguard.cloud`
+**Dev → Prod Transition:**
+The Gateway Proxy is designed to be stateless. It uses **two independent environment variables** — each must be set explicitly for both environments. There is no derivation from one to the other.
+
+| Variable | Dev (localhost) | Prod (EC2) |
+|---|---|---|
+| `GUARDIAN_URL` | `http://localhost:8080/v1/chat/completions` | `http://<ec2-guardian-ip>:8080/v1/chat/completions` |
+| `CENTRAL_SERVICE_URL` | `http://localhost:8000` | `http://<ec2-central-ip>:8000` |
+
+- **Gateway**: always runs on the developer's machine (localhost:9020) or its own EC2 instance.
+- **Guardian** (Granite 4.1) and **Central Service** each run on separate EC2 instances in production.
+- Neither URL is derived from the other — no `dirname`, no `rsplit`, no silent fallback.
 
 | Component | Technology | Role |
 | :--- | :--- | :--- |

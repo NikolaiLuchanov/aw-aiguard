@@ -29,7 +29,6 @@ class AuditLogger:
 
     def __init__(
         self,
-        base_url: str,
         buffer_path: str,
         max_queue_size: int = 1000,
         batch_size: int = 50,
@@ -39,9 +38,7 @@ class AuditLogger:
         if backend_url:
             self.backend_url = backend_url.rstrip("/")
         else:
-            # Legacy derivation: pre-fix setups derived the backend from
-            # GUARDIAN_URL. main.py warns when this path is taken.
-            self.backend_url = os.path.dirname(base_url).rstrip("/")
+            raise ValueError("backend_url is required — must be set explicitly via CENTRAL_SERVICE_URL")
         self.buffer_path = os.path.expanduser(buffer_path)
         self.max_queue_size = max_queue_size
         self.batch_size = batch_size

@@ -55,22 +55,17 @@ BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-confi
 # ONE env var for ALL central-service traffic: audit ingestion, dashboard,
 # HITL cloud sync, BYOC cloud sync, heartbeat, settings poll. This is a
 # DIFFERENT service from the guardian model - do not derive it from GUARDIAN_URL.
+#
+# REQUIRED — no fallback. Each environment sets its own value:
+#   dev:  http://localhost:8000
+#   prod: http://<central-service-ec2-ip>:8000
 CENTRAL_SERVICE_URL = os.getenv("CENTRAL_SERVICE_URL", "").rstrip("/")
 if not CENTRAL_SERVICE_URL:
-    # Legacy fallback: pre-fix setups derived the backend from GUARDIAN_URL.
-    # (The old code used GUARDIAN_URL.rsplit("/", 1)[0] for HITL.)
-    # Works only when guardian and backend share a host:port - deprecated.
-    CENTRAL_SERVICE_URL = os.path.dirname(GUARDIAN_URL or "").rstrip("/")
-    print(
-        "WARNING: CENTRAL_SERVICE_URL is not set - falling back to "
-        f"dirname(GUARDIAN_URL) = {CENTRAL_SERVICE_URL}. Set CENTRAL_SERVICE_URL "
-        "in gateway/.env to point at the central service explicitly "
-        "(dev: http://localhost:8000, prod: http://<central-service-ec2-ip>:8000). "
-        "This fallback is deprecated (finding #4)."
-    )
+    print("Error: CENTRAL_SERVICE_URL must be set in gateway/.env (central-service base URL)")
+    exit(1)
 
-# BYOC Cloud Sync (Phase 3.2) - BYOC_CLOUD_URL is a deprecated per-feature
-# override; defaults to CENTRAL_SERVICE_URL.
+# BYOC Cloud Sync (Phase 3.2) - deprecated override; must be explicitly set.
+# Defaults to CENTRAL_SERVICE_URL only if set via env, not as a silent fallback.
 BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "").rstrip("/") or CENTRAL_SERVICE_URL
 BYOC_SYNC_INTERVAL = int(os.getenv("BYOC_SYNC_INTERVAL", "120"))  # seconds
 
@@ -126,7 +121,6 @@ byoc = BYOCEngine(
 
 # Initialize the Audit Logger — explicit central-service backend (finding #4)
 audit_logger = AuditLogger(
-    base_url=GUARDIAN_URL,          # kept for the legacy fallback path only
     buffer_path=AUDIT_BUFFER_PATH,
     backend_url=CENTRAL_SERVICE_URL,
 )

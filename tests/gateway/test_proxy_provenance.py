@@ -27,7 +27,7 @@ class TestProxyProvenanceIntegration:
         byoc = BYOCEngine(rules_path=byoc_rules_path)
         hitl = HITLGate(rules_path=hitl_rules_path)
         audit = AuditLogger(
-            base_url="http://localhost:8000/guardian",
+            backend_url="http://localhost:8000",
             buffer_path=str(tmp_path / "audit.jsonl"),
         )
         return LLMProxy(

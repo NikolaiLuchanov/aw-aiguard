@@ -81,13 +81,19 @@ def test_byoc_cloud_url_defaults_to_central_service_url():
     assert byoc == central
 
 
-def test_central_service_url_falls_back_with_warning():
-    """Legacy setups without CENTRAL_SERVICE_URL still work, with a loud warning."""
-    stdout, values = _probe(
-        extra_env={"GUARDIAN_URL": "http://localhost:8000/guardian"},
+def test_central_service_url_required():
+    """Missing CENTRAL_SERVICE_URL must exit non-zero with an error message."""
+    env = {k: v for k, v in os.environ.items()}
+    # Force neutralize so .env can't provide a value
+    for k in ("BYOC_CLOUD_URL", "HITL_CLOUD_URL", "CENTRAL_SERVICE_URL"):
+        env[k] = ""
+    result = subprocess.run(
+        [VENV_PYTHON, "-c", PROBE, PROJECT_ROOT],
+        cwd=GATEWAY_DIR, capture_output=True, text=True, env=env, timeout=60,
     )
-    assert values[0] == "http://localhost:8000"
-    assert "WARNING: CENTRAL_SERVICE_URL is not set" in stdout
+    assert result.returncode != 0
+    combined = (result.stdout + result.stderr)
+    assert "CENTRAL_SERVICE_URL" in combined
 
 
 def test_guardian_url_required():

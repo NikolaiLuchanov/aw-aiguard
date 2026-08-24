@@ -8,10 +8,10 @@ catch the threat and which don't. Designed for local analysis of attack vectors.
 Usage:
     python tools/threat_probe.py "your prompt here"
     python tools/threat_probe.py --file attack_vectors.txt
-    python tools/threat_probe.py --prompt "test" --guardian-url http://localhost:8000/guardian
+    python tools/threat_probe.py --prompt "test" --guardian-url http://localhost:8080/v1/chat/completions
 
 Environment variables:
-    GUARDIAN_URL       Backend Guardian API URL (default: http://localhost:8000/guardian)
+    GUARDIAN_URL       Guardian endpoint (OpenAI-compatible /v1/chat/completions, default: http://localhost:8080/v1/chat/completions)
     BYOC_RULES_PATH    Path to byoc_rules.yaml (default: ./guardrail-config/byoc_rules.yaml)
     SCAN_RULES_PATH    Path to scan_rules.yaml (default: ./guardrail-config/scan_rules.yaml)
 """
@@ -189,7 +189,7 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
     Falls back to UNKNOWN if backend unreachable.
     """
     if guardian_url is None:
-        guardian_url = os.getenv("GUARDIAN_URL", "http://localhost:8000/guardian")
+        guardian_url = os.getenv("GUARDIAN_URL", "http://localhost:8080/v1/chat/completions")
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
@@ -582,7 +582,7 @@ Examples:
   python tools/threat_probe.py --file attack_vectors.txt
 
   # Specify custom backend
-  python tools/threat_probe.py "test" --guardian-url http://localhost:8000/guardian
+  python tools/threat_probe.py "test" --guardian-url http://localhost:8080/v1/chat/completions
 
   # Use with low-trust provenance headers
   python tools/threat_probe.py "test" --headers '{"x-provenance-source-id": "public-web", "x-provenance-trust": "0.1"}'
@@ -599,8 +599,8 @@ Examples:
     )
     parser.add_argument(
         "--guardian-url",
-        default=os.getenv("GUARDIAN_URL", "http://localhost:8000/guardian"),
-        help="Guardian API URL (default: http://localhost:8000/guardian)"
+        default=os.getenv("GUARDIAN_URL", "http://localhost:8080/v1/chat/completions"),
+        help="Guardian API URL (default: http://localhost:8080/v1/chat/completions)"
     )
     parser.add_argument(
         "--byoc-rules",

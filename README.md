@@ -53,20 +53,50 @@ curl http://localhost:9020/health
 | Port | Role | Direction | Description |
 | :--- | :--- | :--- | :--- |
 | **`9020`** | **Gateway Proxy** | `Client` → `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
-| **`8000`** | **Central Service** | `Gateway` → `Backend` | Single service handling Guardian scoring (`/guardian`), DB, Audit logs, HITL state, and config sync. |
+|| **`8000`** | **Central Service** | `Gateway` → `Backend` | Audit ingestion, DB, HITL state, BYOC sync, settings, dashboard UI |
+|| **`8080`** | **Guardian Model** | `Gateway` → `Guardian` | Granite 4.1 safety classification (separate EC2 or localhost) |
 
-The entire system is controlled by one env var: `GUARDIAN_URL`. The audit/backend base URL is derived automatically from it.
+The gateway requires two explicit environment variables — **`GUARDIAN_URL`** (safety judge) and **`CENTRAL_SERVICE_URL`** (audit/dashboard/BYOC). They are independent; neither is derived from the other.
 
-## ☁️ Dev vs. Production Transition
+## ☁️ Dev vs. Production Environments
 
-The system is designed to be "Cloud-Ready." The transition from local development to production is controlled by a single environment variable: `GUARDIAN_URL`.
+The gateway uses **two independent environment variables** — each must be set explicitly for both environments. There is no derivation from one to the other.
 
-- **Development Mode:** `GUARDIAN_URL=http://localhost:8000/guardian`
-  - Gateway sends Guardian scoring requests to `http://localhost:8000/guardian`.
-  - Audit/backend requests go to `http://localhost:8000` (derived as the base of `GUARDIAN_URL`).
-- **Production Mode:** `GUARDIAN_URL=https://api.aw-aiguard.cloud/guardian`
-  - Gateway sends Guardian scoring requests to the cloud.
-  - Audit/backend requests go to `https://api.aw-aiguard.cloud` (derived base).
+### Local Development
+
+```bash
+# gateway/.env
+GUARDIAN_URL=http://localhost:8080/v1/chat/completions
+CENTRAL_SERVICE_URL=http://localhost:8000
+```
+
+- **Guardian**: local llama.cpp on port 8080 (self-hosted Granite 4.1)
+- **Central Service**: Docker Compose stack — PostgreSQL 16, MinIO, API server on localhost:8000
+- **Gateway**: listens on localhost:9020
+
+### Production (EC2)
+
+```bash
+# gateway/.env (on the EC2 instance running the gateway)
+GUARDIAN_URL=http://<ec2-guardian-public-ip>:8080/v1/chat/completions
+CENTRAL_SERVICE_URL=http://<ec2-central-service-public-ip>:8000
+```
+
+- **Guardian**: Granite 4.1 on its own EC2 instance (e.g., `g6e.xlarge`) running llama.cpp, port 8080
+- **Central Service**: Separate EC2 instance running Docker Compose (PostgreSQL, MinIO, FastAPI on port 8000)
+- **Gateway**: on its own EC2 instance (or ECS task), listening on 0.0.0.0:9020
+
+Each service runs on a **different EC2 instance** in production — Guardian (safety judge) and Central Service (audit/dashboard/BYOC sync) are independent, and the gateway connects to both via their respective public IPs.
+
+### Environment Variable Reference (Gateway)
+
+| Variable | Dev | Prod | Required |
+|---|---|---|---|
+| `GUARDIAN_URL` | `http://localhost:8080/v1/chat/completions` | `http://<ec2-guardian-ip>:8080/v1/chat/completions` | Yes |
+| `CENTRAL_SERVICE_URL` | `http://localhost:8000` | `http://<ec2-central-ip>:8000` | Yes |
+| `TARGET_API_BASE_URL` | `https://api.openai.com/v1` | Same | Yes |
+| `TARGET_API_KEY` | Your API key | Same | Yes |
+| `PROXY_PORT` | `9020` | `9020` | No |
 
 ## 🛡️ Safety Pipeline
 
@@ -123,7 +153,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-- `tests/`: 448 pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
+|- `tests/`: **690+** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes

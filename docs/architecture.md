@@ -35,7 +35,19 @@ Client → Gateway Proxy (9020) → Central Service (8000) → LLM Cloud API
     │          └─ Alert fired  → Telegram/Slack/Email      │
 ```
 
-Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 10-layer security pipeline. The system requires two environment variables: `GUARDIAN_URL` (safety judge endpoint) and `CENTRAL_SERVICE_URL` (central service API for audit, dashboard, and BYOC sync).
+Every request from Claude Code, Codex, Claude Cowork, or Hermes flows through a 10-layer security pipeline. The system requires two environment variables: `GUARDIAN_URL` (safety judge endpoint) and `CENTRAL_SERVICE_URL` (central service API for audit, dashboard, and BYOC sync). Neither variable is derived from the other — both must be explicitly configured for the target environment.
+
+### 1.5 Environment Topology
+
+|| Component | Local Dev | EC2 Production |
+|---|---|---|
+| **Gateway Proxy** | localhost:9020 | EC2 instance or ECS task (port 9020) |
+| **Guardian** | localhost:8080 | EC2 (g6e.xlarge, port 8080) |
+| **Central Service** | localhost:8000 | EC2 (t3.medium, port 8000) |
+| **PostgreSQL** | Docker (localhost:5432) | EC2 (EBS, no public access) |
+| **MinIO** | Docker (localhost:9000) | EC2 (EBS, no public access) |
+
+**Key principle:** Gateway is always local (or on its own EC2 instance). Only Guardian and Central Service are cloud-hosted. No URL is silently derived from another — explicit configuration is required for every environment.
 
 ---
 

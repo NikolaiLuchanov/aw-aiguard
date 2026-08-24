@@ -261,7 +261,7 @@ Prompt templates are defined in `guardrail-config/guardian_prompts.yaml` (fast, 
 
 When the Guardian service is unreachable, the proxy applies the configured fail strategy (from `GUARDIAN_FAIL_STRATEGY`):
 
-| Strategy | Behavior | Security Level | Use Case |
+|| Strategy | Behavior | Security Level | Use Case |
 |---|---|---|---|
 | `block` | Blocks all requests if safety cannot be verified | 🔴 High | Production |
 | `allow` | Forwards without safety check | 🟢 Low | Local dev |
@@ -270,9 +270,108 @@ When the Guardian service is unreachable, the proxy applies the configured fail 
 
 ---
 
-## 6. Admin Dashboard
+## 6. EC2 Production Deployment
 
-### 6.1 Access
+### 6.1 Topology Overview
+
+In production, each service runs on its own EC2 instance:
+
+|| Component | Instance | Role |
+|---|---|---|
+| **Gateway Proxy** | EC2 (t3.medium) or ECS task | Local proxy on port 9020; receives all LLM client traffic |
+| **Guardian** | EC2 (g6e.xlarge) | Granite 4.1 safety classifier on port 8080 |
+| **Central Service** | EC2 (t3.medium) | Audit API, dashboard, BYOC sync on port 8000 |
+
+**Key principle:** The Gateway is always local to the LLM client (Claude Code, Codex, Hermes). Only Guardian and Central Service are cloud-hosted.
+
+### 6.2 Configuration
+
+Copy the EC2 example to `gateway/.env` and fill in your EC2 public IPs:
+
+```bash
+cp gateway/.env.ec2.example gateway/.env
+# Edit gateway/.env with your EC2 public IPs
+```
+
+| Variable | Value |
+|---|---|
+| `GUARDIAN_URL` | `http://<ec2-guardian-public-ip>:8080/v1/chat/completions` |
+| `CENTRAL_SERVICE_URL` | `http://<ec2-central-service-public-ip>:8000` |
+| `TARGET_API_KEY` | Your LLM provider API key |
+
+### 6.3 Deploying the Central Service
+
+Use the bootstrap script to deploy to EC2 via SSM (no SSH required):
+
+```bash
+export CENTRAL_EC2_INSTANCE_ID=i-xxxxxxxxxxxxxxxxx
+export PG_PASSWORD=your_secure_password
+export MINIO_ROOT_PASSWORD=your_secure_password
+chmod +x scripts/deploy-central-service-ec2.sh
+./scripts/deploy-central-service-ec2.sh
+```
+
+The script performs:
+1. Bootstraps the EC2 instance (Docker, git)
+2. Clones the aw-aiguard repository
+3. Creates `.env` with secure passwords
+4. Copies `guardrail-config/` directory
+5. Starts Docker Compose (`docker-compose.prod.yml`)
+6. Verifies deployment
+
+### 6.4 Deploying the Gateway
+
+#### Option A: EC2 instance with systemd
+
+```bash
+# On the EC2 instance:
+sudo mkdir -p /opt/aw-aiguard
+git clone https://github.com/your-org/aw-aiguard.git /opt/aw-aiguard
+cd /opt/aw-aiguard
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure the gateway
+cp gateway/.env.ec2.example gateway/.env
+# Edit with your EC2 public IPs
+
+# Install as a systemd service
+sudo cp gateway/aw-aiguard-gateway.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now aw-aiguard-gateway
+sudo systemctl status aw-aiguard-gateway
+```
+
+#### Option B: ECS Task
+
+A sample ECS task definition (`gateway/task-definition.json`) is provided for containerized deployment.
+
+### 6.5 Security Groups
+
+|| Inbound | From | Port | Purpose |
+|---|---|---|---|
+| Gateway SG | Central Service SG | 9020 | Gateway → Central Service (audit, HITL, BYOC sync) |
+| Central Service SG | Gateway SG | 8000 | Central Service API |
+| Guardian SG | Gateway SG | 8080 | Guardian scoring endpoint |
+
+All services should be accessible only from the Gateway security group — no public internet exposure.
+
+### 6.6 Smoke Testing
+
+```bash
+# For production (requires gateway/.env configured):
+./smoke-test.sh prod
+
+# For local dev (requires Guardian + Central Service running):
+./smoke-test.sh dev
+```
+
+---
+
+## 7. Admin Dashboard
+
+### 7.1 Access
 
 The Admin Dashboard is served by the central service at:
 

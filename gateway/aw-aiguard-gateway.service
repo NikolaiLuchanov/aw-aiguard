@@ -1,0 +1,30 @@
+[Unit]
+Description=aw-aiguard Gateway Proxy (Production)
+Documentation=https://github.com/your-org/aw-aiguard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aw-aiguard
+Group=aw-aiguard
+WorkingDirectory=/opt/aw-aiguard
+EnvironmentFile=/opt/aw-aiguard/gateway/.env
+ExecStart=/opt/aw-aiguard/venv/bin/python -m uvicorn gateway.main:app \
+    --host 0.0.0.0 \
+    --port 9020 \
+    --log-level info
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/aw-aiguard
+
+[Install]
+WantedBy=multi-user.target

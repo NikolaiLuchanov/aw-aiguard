@@ -16,24 +16,28 @@ class TestAuditLogger:
     def logger(self, tmp_path):
         buffer_path = str(tmp_path / "audit_buffer.jsonl")
         return AuditLogger(
-            base_url="http://localhost:8000/guardian",
             buffer_path=buffer_path,
+            backend_url="http://localhost:8000",
             batch_size=2,
             flush_interval=0.1,
         )
 
-    def test_init_backend_url_derived(self, tmp_path):
-        """backend_url is derived from base_url (strip path component)."""
-        aud = AuditLogger(
-            base_url="http://localhost:8000/guardian",
-            buffer_path=str(tmp_path / "buf.jsonl"),
-        )
-        assert aud.backend_url == "http://localhost:8000"
+    def test_init_requires_backend_url(self, tmp_path):
+        """backend_url is required — raises ValueError without it."""
+        with pytest.raises(ValueError, match="backend_url is required"):
+            AuditLogger(buffer_path=str(tmp_path / "buf.jsonl"))
 
-    def test_init_expands_buffer_path(self, tmp_path):
+    def test_init_explicit_backend_url_strips_trailing_slash(self, tmp_path):
         aud = AuditLogger(
-            base_url="http://localhost:8000/guardian",
+            buffer_path=str(tmp_path / "buf.jsonl"),
+            backend_url="http://central:9999/",
+        )
+        assert aud.backend_url == "http://central:9999"
+
+    def test_init_expands_buffer_path(self):
+        aud = AuditLogger(
             buffer_path="~/test/buf.jsonl",
+            backend_url="http://central:8000",
         )
         assert aud.buffer_path.startswith(os.path.expanduser("~"))
 
@@ -77,8 +81,8 @@ class TestAuditLogger:
     @pytest.mark.asyncio
     async def test_log_drops_on_queue_full(self, tmp_path, caplog):
         aud = AuditLogger(
-            base_url="http://localhost:8000",
             buffer_path=str(tmp_path / "buf.jsonl"),
+            backend_url="http://localhost:8000",
             max_queue_size=2,
         )
         await aud.log(AuditEvent(api_key="k", event_type="allow", component="p"))
@@ -107,8 +111,8 @@ class TestAuditLogger:
     async def test_write_to_buffer_creates_parent_dirs(self, tmp_path):
         deep_path = str(tmp_path / "a" / "b" / "c" / "buf.jsonl")
         aud = AuditLogger(
-            base_url="http://localhost:8000",
             buffer_path=deep_path,
+            backend_url="http://localhost:8000",
         )
         events = [AuditEvent(api_key="k", event_type="allow", component="p")]
         await aud._write_to_buffer(events)
@@ -179,30 +183,3 @@ class TestAuditLogger:
         with patch.object(logger._client, "post", mock_post):
             await logger._flush_remaining()
         mock_post.assert_called_once()
-
-    # --- backend_url kwarg (finding #4) ---
-
-    def test_init_explicit_backend_url(self, tmp_path):
-        """Explicit backend_url wins over derivation from base_url."""
-        aud = AuditLogger(
-            base_url="http://localhost:8000/guardian",
-            buffer_path=str(tmp_path / "buf.jsonl"),
-            backend_url="http://central:9999",
-        )
-        assert aud.backend_url == "http://central:9999"
-
-    def test_init_explicit_backend_url_strips_trailing_slash(self, tmp_path):
-        aud = AuditLogger(
-            base_url="http://localhost:8000/guardian",
-            buffer_path=str(tmp_path / "buf.jsonl"),
-            backend_url="http://central:9999/",
-        )
-        assert aud.backend_url == "http://central:9999"
-
-    def test_init_fallback_derivation_when_no_explicit_url(self, tmp_path):
-        """Legacy behavior: dirname(base_url) when backend_url is not given."""
-        aud = AuditLogger(
-            base_url="http://localhost:8000/guardian",
-            buffer_path=str(tmp_path / "buf.jsonl"),
-        )
-        assert aud.backend_url == "http://localhost:8000"
