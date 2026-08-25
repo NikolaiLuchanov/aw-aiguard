@@ -16,9 +16,9 @@ Per `summary.md`, the threat model defines 4 attack goals. All 4 are covered by 
 
 | Attack Goal | What Happens | Security Layer | Status |
 |---|---|---|---|
-| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L4 BYOC `never_exfiltrate` + L5 HITL | ✅ Implemented |
-| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L5 HITL Gate + L4 BYOC | ✅ Implemented |
-| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L4 BYOC `never_override_system_prompt` + L5 HITL | ✅ Implemented |
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL | ✅ Implemented |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC | ✅ Implemented |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL | ✅ Implemented |
 || **Answer manipulation** | Fact substitution or false context injected into LLM output | L6 Post-response thinking + L6B LLM05 output control | ✅ Implemented (Phase 4.3 + Phase 4.4) |
 
 Indirect (data-borne) injection — poisoning external sources the agent ingests — is mitigated by provenance tagging (L0, ✅ Phase 2.5) + trust-gated Guardian scoring (L2, ✅ Phase 1.3). Low-trust data triggers stricter checks and mandatory HITL on writes.
@@ -170,7 +170,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Hot-reload: `reload_schemas()` and `reload_rules()` for live rule updates.
     - Integrated into `gateway/core/proxy.py` pipeline between Function-Call Detector and BYOC.
     - `central-service/api_server.py`: `schema_validator` → `CRITICAL` severity.
-    - 20 unit tests in `tests/gateway/test_schema_validator.py` covering validation, config, hot-reload.
+    - 22 unit tests in `tests/gateway/test_schema_validator.py` covering validation, config, hot-reload.
 |- [x] **4.6 Agency Constraints** ✅
     - Implement max-hop depth limits for sub-agent delegation chains to prevent recursive injection attacks.
     - `AgencyController` (`gateway/core/agency_controller.py`): enforces delegation depth limits, chain continuity validation, MCP server vetting (allowlist/blocklist), and action-level approval requirements.
@@ -179,8 +179,8 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
     - Three new `BlockReason` codes: `AGENCY_DEPTH_EXCEEDED`, `AGENCY_CHAIN_BROKEN`, `AGENCY_APPROVAL_REQUIRED`.
     - Integrated into `gateway/core/proxy.py` pipeline between BYOC and HITL.
     - `central-service/api_server.py`: `agency_controller` → `HIGH` severity.
-    - 12 unit tests in `tests/gateway/test_agency_controller.py` covering depth checks, chain integrity, allowlist, approval, MCP vetting.
-    - 10 integration tests in `tests/gateway/test_phase4_integration.py` covering delegation depth enforcement, approval requirements, chain broken detection, and deep delegation paths.
+    - 17 unit tests in `tests/gateway/test_agency_controller.py` covering depth checks, chain integrity, allowlist, approval, MCP vetting.
+    - 13 integration tests in `tests/gateway/test_phase4_integration.py` covering delegation depth enforcement, approval requirements, chain broken detection, and deep delegation paths.
     - `gateway/README.md`: Added agency constraints documentation section.
     - `guardrail-config/README.md`: Added `agency_rules.yaml` entry with field reference.
     - `architecture_workflow.html`: Added Agency Controller node (P5) to Mermaid diagram with purple styling.
@@ -192,9 +192,9 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 
 - [x] **5.1 Red-Teaming & Penetration Testing** ✅ Implemented (2026-07-23)
     - Created `tests/red_team/` directory with 10 test files covering all 4 attack goals
-    - 85 adversarial test cases: direct injection (14), indirect injection (14), masking techniques (11), exfiltration (8), action hijack (7), quiet commands (6), answer manipulation (5), lethal trifecta (5), delegation chains (5), integration pipeline (6)
+    - 95 adversarial test cases: direct injection (16), indirect injection (16), masking techniques (11), exfiltration (8), action hijack (7), quiet commands (6), answer manipulation (5), lethal trifecta (5), delegation chains (5), integration pipeline (6)
     - All attacks blocked/paused by appropriate safety layers. Zero false positives.
-    - Total test suite: **690+ unit tests** covering all safety layers and all Phase 3+ features.
+    - Total test suite: **712 unit tests** covering all safety layers and all Phase 3+ features.
     - Report: `docs/red_team_report.md`
 |- [ ] **5.2 Performance Optimization**
     - Tune Guardian HTTP latency and FastAPI middleware to minimize round-trips between local proxy and cloud backend.
@@ -210,7 +210,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
       - `gateway/README.md` — Added performance tuning section (Phase 5.2 reference)
       - `central-service/README.md` — Added operational guide reference
       - `guardrail-config/README.md` — Updated with all 12 YAML files and enhanced descriptions
-      - `IMPLEMENTATION_PLAN.md` — Marked Phase 5.3 complete, updated test count to 654
+      - `IMPLEMENTATION_PLAN.md` — Marked Phase 5.3 complete, updated test count to 712
       - `architecture-design.md` — Added Phase 5 section: "Validation & Finalization"
       - `structure.md` — Updated directory listing with docs/ and test directories
       - `recommendation.md` — Added Phase 5 implementation status table
@@ -247,7 +247,7 @@ The Gateway Proxy is designed to be stateless. It uses **two independent environ
 
 ## 🧪 Testing
 
-### Pytest Test Suite — 690 Unit Tests
+### Pytest Test Suite — 712 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). No live services required.
 
@@ -258,25 +258,34 @@ pytest tests/ -v
 
 ### Layer-by-Layer Test Coverage
 
-| Layer | Module | Tests | What It Verifies |
-|---|---|---|---|
-| **L0** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
-| **L1** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
-| **L2+** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes, aggressive mode, provenance tracking
-|| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement
-||| **L5.1** | `gateway/core/schema_validator.py` | 20 | CaMeL JSON schema validation for tool parameters, hot-reload
-||| **L5.2** | `gateway/core/agency_controller.py` | 12 | Delegation depth limits, chain integrity, MCP vetting, approval requirements
-|| — | `gateway/core/proxy.py` + `test_phase4_integration.py` | 10 | End-to-end: schema + agency integration across full pipeline
-|| **L5** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies
-| **L2** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies, HTTP 500, timeout, payload shape |
-| **L3** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-key rate limiting |
-| **L4** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry, status endpoint, RequestContext, custom rules |
-| — | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes |
-| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer write/replay, flush on shutdown, overflow |
-| — | `gateway/core/proxy.py` | 18 | End-to-end: safe pass, guardian block, byoc block, HITL pause, streaming |
-| **Cloud** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji, credential warnings |
-| **Cloud** | `central-service/api_server.py` | 11 | `_get_severity` mapping, settings YAML loading |
-| **Cloud** | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, pool init, schema alignment |
+|| Layer | Module | Tests | What It Verifies |
+||---|---|---|---|
+|| **L0** | `shared/schemas.py` | 9 | AuditEvent field validation, literal constraints, model serialization |
+|| **L0** | `gateway/core/provenance.py` | 26 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
+|| **L0** | `gateway/core/provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 35 | Full provenance pipeline: extraction, serialization, trust-level checks, proxy and API server integration |
+|| **L1** | `gateway/core/scanner.py` | 15 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+|| **L2+** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes (strip/redact/log_only), aggressive mode, provenance tracking |
+|| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement |
+|| **L5.1** | `gateway/core/schema_validator.py` | 22 | CaMeL JSON schema validation for tool parameters, hot-reload |
+|| **L5.2** | `gateway/core/agency_controller.py` | 17 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |
+|| — | `gateway/core/proxy.py` + `test_phase4_integration.py` | 31 | End-to-end: schema + agency integration across full pipeline, proxy pipeline tests |
+|| **L6** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies |
+|| **L3** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides |
+|| **L2** | `gateway/core/guardrail.py` | 14 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500, timeout, payload shape |
+|| **L2** | `gateway/core/guardian_client.py` | 8 | Guardian client protocol: build_request, parse_score, load_prompts |
+|| **L3** | `gateway/core/byoc.py` | 17 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-API-key rate limiting, rule summary API |
+|| **L3** | `gateway/core/byoc_cloud.py` + `gateway/core/byoc_sync.py` | 30 | BYOC cloud sync: dynamic reload, per-key overrides, background sync loop, source attribution |
+|| **L4** | `gateway/core/hitl.py` | 28 | Pause on irreversible actions, approve/deny/expiry, full request replay, custom rules, notification modes |
+|| **L4** | `gateway/core/hitl_cloud.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 45 | HITL cloud sync, approval, recovery, cleanup loop, prompt_hash + provenance injection |
+|| — | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes |
+|| — | `gateway/core/audit.py` | 15 | Async queueing, JSONL buffer write/replay, flush on shutdown, overflow, prompt hashing |
+|| — | `gateway/core/proxy.py` | 18 | End-to-end: safe pass, guardian block, byoc block, HITL pause, streaming, path normalization |
+|| — | `gateway/core/gateway_heartbeat.py` + `gateway/core/settings_poll.py` + `gateway/core/wiring.py` | 23 | Gateway heartbeat, settings polling, wiring integration |
+|| **Cloud** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji, credential warnings |
+|| **Cloud** | `central-service/api_server.py` + `test_api_server_provenance.py` | 19 | `_get_severity` mapping, settings YAML loading, cloud HITL endpoints, provenance handling |
+|| **Cloud** | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, pool init, schema field alignment with SQL table |
+|| **Cloud** | `central-service/partition_manager.py` | 18 | Partition lifecycle: archive→MinIO, drop, create future, error handling |
+|| **Cloud** | `central-service/dashboard_*` + `test_hitl_endpoints.py` + `test_settings_history.py` + `test_settings_audit_extended.py` + `test_templates.py` + `test_port_config.py` | 72 | Dashboard HITL/BYOC/audit/gateways/heartbeat/settings endpoints, HITL bridge endpoints, settings history, notification templates |
 
 ### Standalone Scripts → Pytest Migration
 

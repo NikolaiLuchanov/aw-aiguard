@@ -373,10 +373,10 @@ Per `summary.md`, the threat model defines 4 attack goals. All are covered by im
 
 | Attack Goal | What Happens | Security Layer | Status |
 |---|---|---|---|
-| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L4 BYOC `never_exfiltrate` + L5 HITL | ✅ Implemented |
-| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L5 HITL Gate + L4 BYOC | ✅ Implemented |
-| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L4 BYOC `never_override_system_prompt` + L5 HITL | ✅ Implemented |
-| **Answer manipulation** | Fact substitution or false context injected into LLM output | L7 Thinking-Mode + L8 LLM05 Output Control | ✅ Implemented |
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL | ✅ Implemented |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC | ✅ Implemented |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL | ✅ Implemented |
+| **Answer manipulation** | Fact substitution or false context injected into LLM output | L6 Thinking-Mode + L6B LLM05 Output Control | ✅ Implemented |
 
 Indirect (data-borne) injection is mitigated by provenance tagging (L0) + trust-gated Guardian scoring (L2). Low-trust data triggers stricter checks and mandatory HITL on writes.
 

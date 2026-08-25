@@ -114,7 +114,7 @@ pytest tests/ --collect-only -q 2>/dev/null | tail -5
 ```
 
 4. **Section 4 (Security Pipeline Layers)** — Add Layer 7 reference:
-   - `| L7 | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.6 ✅) |`
+   - `| L5.2 | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.6 ✅) |`
 
 5. **Section 5 (Provenance)** — Update provenance enforcement rules to include agency chain tracking (already at line 256, confirm it references Phase 4.6 as implemented ✅)
 
@@ -135,10 +135,10 @@ pytest tests/ --collect-only -q 2>/dev/null | tail -5
    - `| P2 | Agency constraints: delegation depth limits, chain integrity | ✅ Implemented (Phase 4.6) |`
 
 2. **Section 10 (Defense-in-Depth Summary)** — Add Phase 4.6 entry to the layer table:
-   - `| L7 | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.6 ✅) |`
+   - `| L5.2 | *(pre-forward)* | Agency constraints: delegation depth, chain integrity (Phase 4.6 ✅) |`
 
 3. **Testing & Verification section** — Update test count table to include Phase 4.6:
-   - `| Agency Controller (L7) | gateway/core/agency_controller.py | 12 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |`
+   - `| Agency Controller (L5.2) | gateway/core/agency_controller.py | 12 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |`
 
 4. **Line 348** — Update total test count to match actual pytest output
 

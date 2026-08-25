@@ -53,7 +53,7 @@ Create `tests/red_team/` directory with a structured test harness that mirrors r
 
 ### Step 5.1.2 — Direct Injection Test Suite (`test_direct_injection.py`)
 
-**Target:** L2 Guardian pre-flight gate + L4 BYOC stop-limits + L5 HITL
+**Target:** L2 Guardian pre-flight gate + L3 BYOC stop-limits + L4 HITL
 
 **Test cases (12 tests):**
 1. `test_direct_jailbreak_blocked` — Classic "ignore all instructions" payload → Guardian `no` → 403 block

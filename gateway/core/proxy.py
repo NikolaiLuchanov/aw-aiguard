@@ -46,7 +46,7 @@ class LLMProxy:
         sanitizer: Optional[IngestionSanitizer] = None,    # Phase 4.2
         output_controller: Optional[OutputController] = None, # Phase 4.3
         thinking_verifier: Optional[ThinkingModeVerifier] = None,  # Phase 4.4
-        agency_controller: Optional[AgencyController] = None,     # Phase 4.5.2
+        agency_controller: Optional[AgencyController] = None,     # Phase 4.6
         audit_logger: Optional["AuditLogger"] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
@@ -61,7 +61,7 @@ class LLMProxy:
         self.sanitizer = sanitizer
         self.output_controller = output_controller
         self.thinking_verifier = thinking_verifier  # Phase 4.4
-        self.agency_controller = agency_controller    # Phase 4.5.2
+        self.agency_controller = agency_controller    # Phase 4.6
         self.audit_logger = audit_logger
         self.scan_sequence = scan_sequence.upper()
         self.client: Optional[httpx.AsyncClient] = None
@@ -149,7 +149,8 @@ class LLMProxy:
             )
 
         # --- Security Pipeline Execution ---
-        # Pipeline Order (Layer 1→5): PII Scan → Guardian → BYOC → HITL → Forward
+        # Inbound order: L0 Provenance → L1 PII → L2 Guardian → L3.5 Function-Call Detector → L3 BYOC → L5.1 Schema Validator → L5.2 Agency → L4 HITL → Forward
+        # Post-response order: Sanitizer (L2+) → Thinking Mode (L6) → Output Control (L6B)
 
         # Layer 1 & 2: PII Scan + Guardian (Sequence A/B/C)
         if prompt:
@@ -321,7 +322,7 @@ class LLMProxy:
                         prompt_hash=prompt_hash, provenance=provenance.to_dict(),
                     ) if self.audit_logger else None
 
-        # Layer 3: BYOC Stop-Limits (final authority — after PII + Guardian + Function-Call Check)
+        # Layer 3: BYOC Stop-Limits (pre-execution layer — after PII + Guardian + Function-Call Check; before Schema Validator + Agency + HITL)
         byoc_result: Optional[BYOCCheckResult] = None
         if prompt and self.byoc:
             byoc_result = self.byoc.check(prompt, self.api_key)
@@ -346,7 +347,7 @@ class LLMProxy:
                 ) if self.audit_logger else None
 
         # Phase 4.5.1: CaMeL Schema Validator (validate tool parameters against JSON schema)
-        # Between Function-Call Detector (4.1) and BYOC (L3)
+        # After BYOC (L3), before Agency Controller (L5.2)
         if self.validator and body and isinstance(body, dict):
             # Extract tool name and parameters from request body
             tool_name = (
@@ -372,7 +373,7 @@ class LLMProxy:
                         blocked_by="schema_validator",
                     )
 
-        # Phase 4.5.2: Agency Controller (delegation depth limits & chain integrity)
+        # Phase 4.6: Agency Controller (delegation depth limits & chain integrity)
         # Between BYOC (L3) and HITL (L4)
         if self.agency_controller and prompt:
             # Extract tool name for agency check

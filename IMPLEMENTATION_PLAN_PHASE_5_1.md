@@ -16,13 +16,13 @@
 L0  Provenance Extraction (headers → dataclass)
 L1  PII Scanner (Sequence A/B/C)
 L2  Guardian Pre-flight (check_safety)
-    └─ Function-Call Hallucination (check, if tool_calls + low-trust/enforce)
-L3  CaMeL Schema Validator (validate, if tool + parameters present)
-L4  BYOC Stop-Limits (check prompt → hard_stop / soft_block)
-L5  Agency Controller (check_delegation → depth / chain / approval / MCP)
+L2.5 Function-Call Hallucination (L3.5, check, if tool_calls + low-trust/enforce)
+L3  BYOC Stop-Limits (check prompt → hard_stop / soft_block)
+L4  CaMeL Schema Validator (L5.1, validate, if tool + parameters present)
+L5  Agency Controller (L5.2, check_delegation → depth / chain / approval / MCP)
 L6  HITL Gate (check_hitl → PAUSE for irreversible actions)
-    └─ Thinking-Mode Verification (verify, advisory post-response)
-L7  Output Control (validate_response → schema / HTML / shell)
+L6.5 Thinking-Mode Verification (verify, advisory post-response)
+L7  Output Control (L6B, validate_response → schema / HTML / shell)
 ```
 
 ### Key Types & Methods Used by Tests
@@ -321,7 +321,7 @@ def make_mock_request():
 
 ### File: `tests/red_team/test_direct_injection.py`
 
-**Target:** L2 Guardian pre-flight gate, L4 BYOC stop-limits, L5 HITL gate
+**Target:** L2 Guardian pre-flight gate + L3 BYOC stop-limits + L4 HITL gate
 
 **Test count: 12 tests**
 
@@ -336,7 +336,7 @@ Each test follows this pattern:
 Direct prompt injection attacks — the attacker puts malicious instructions
 directly in the user's prompt.
 
-Target layers: Guardian (L2), BYOC (L3), HITL (L5)
+Target layers: Guardian (L2), BYOC (L3), HITL (L4)
 """
 
 import pytest
@@ -872,7 +872,7 @@ class TestAttributeMasking:
 
 ### Step 5.1.5a — File: `tests/red_team/test_exfiltration.py` (8 tests)
 
-**Target:** BYOC `never_exfiltrate` (L3), L6B Output Control (L7), HITL (L5), Agency (L5)
+**Target:** BYOC `never_exfiltrate` (L3), L6B Output Control (L6B), HITL (L4), Agency (L5.2)
 
 ```python
 """
@@ -1551,7 +1551,7 @@ After all tests pass, create `docs/red_team_report.md` summarizing:
 | Direct Injection | 12 | 12 | Guardian (L2), BYOC (L3), HITL (L5) |
 | Indirect Injection | 14 | 14 | Sanitizer (L2+), Provenance (L0), Thinking Mode (L6) |
 | Masking Techniques | 10 | 10 | IngestionSanitizer (L2+) |
-| Exfiltration | 8 | 8 | BYOC (L3), Output Control (L7), Agency (L5) |
+| Exfiltration | 8 | 8 | BYOC (L3), Output Control (L6B), Agency (L5.2) |
 | Action Hijack | 8 | 8 | HITL (L5) |
 | Quiet Commands | 6 | 6 | HITL (L5), BYOC (L3), AuditLogger |
 | Answer Manipulation | 5 | 5 | Output Control (L7), Provenance (L0), Thinking Mode (L6) |
@@ -1569,10 +1569,10 @@ After all tests pass, create `docs/red_team_report.md` summarizing:
 | L2 Guardian | 4 | Direct jailbreak variants |
 | L2+ Sanitizer | 14 | All indirect injection, masking, stored injection |
 | L3 BYOC | 6 | Exfiltration, quiet command suppression |
-| L4 Agency | 6 | Depth exceeded, chain broken, MCP vetting |
-| L5 HITL | 14 | All action hijack, quiet command bypass |
+| L5.2 Agency | 6 | Depth exceeded, chain broken, MCP vetting |
+| L4 HITL | 14 | All action hijack, quiet command bypass |
 | L6 Thinking Mode | 5 | Low-trust output verification |
-| L7 Output Control | 5 | Schema validation, HTML escaping |
+| L6B Output Control | 5 | Schema validation, HTML escaping |
 
 ## Edge Cases & Notes
 

@@ -131,10 +131,10 @@ Per `summary.md` Section 3 (Attack Anatomy), the 4 attack goals and their covera
 
 | Attack Goal | What Happens | Security Layer | Status |
 |---|---|---|---|
-| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L4 BYOC `never_exfiltrate` + L5 HITL | ✅ |
-| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L5 HITL Gate + L4 BYOC | ✅ |
-| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L4 BYOC `never_override_system_prompt` + L5 HITL | ✅ |
-| **Answer manipulation** | Fact substitution or false context injected into LLM output | L6 Thinking-Mode + L8 LLM05 Output Control | ✅ |
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL | ✅ |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC | ✅ |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL | ✅ |
+| **Answer manipulation** | Fact substitution or false context injected into LLM output | L6 Thinking-Mode + L6B LLM05 Output Control | ✅ |
 
 ---
 

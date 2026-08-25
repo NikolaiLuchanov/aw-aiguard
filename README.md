@@ -108,9 +108,9 @@ Per the threat model (`summary.md`), attackers target 4 goals. Each maps to a sa
 
 | Attack Goal | What Happens | Safety Layer |
 |---|---|---|
-| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L4 BYOC `never_exfiltrate` + L5 HITL |
-| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L5 HITL Gate + L4 BYOC |
-| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L4 BYOC `never_override_system_prompt` + L5 HITL |
+| **Data exfiltration** | Agent leaks secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL |
+| **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate + L3 BYOC |
+| **Quiet commands** | Prompt tells agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL |
 | **Answer manipulation** | Fact substitution or false context injected into LLM output | L6 Post-response thinking + LLM05 output control |
 
 Indirect (data-borne) injection — poisoning external sources the agent ingests — is mitigated by provenance tagging (L0) + trust-gated Guardian scoring (L2). Low-trust data triggers stricter checks and mandatory HITL on writes.
@@ -119,9 +119,9 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 1. **Provenance Tagging (L0)**: Every request is tagged with provenance metadata (source_id, source_type, trust_level) at ingestion time — enables trust-gated operations and audit traceability.
 2. **PII & Secrets Scanning (L1)**: Local redaction and leakage prevention.
 3. **Guardian Pre-flight (L2)**: Real-time intent classification (Block/Pass).
-4. **Function-Calling Hallucination Detection (L3)**: Evaluates LLM-proposed tool calls for hallucination via Guardian (Phase 4.1 ✅).
-5. **BYOC Stop-Limits (L4)**: Hard boundaries defined by organizational policy.
-6. **HITL Middleware (L5)**: Mandatory human approval for irreversible actions.
+4. **Function-Calling Hallucination Detection (L3.5)**: Evaluates LLM-proposed tool calls for hallucination via Guardian (Phase 4.1 ✅).
+5. **BYOC Stop-Limits (L3)**: Hard boundaries defined by organizational policy.
+6. **HITL Middleware (L4)**: Mandatory human approval for irreversible actions.
 7. **Thinking-Mode Verification (L6)**: Post-response deep reasoning pass (planned Phase 4.4).
 8. **LLM05 Output Control (L6B)**: Schema validation and escaping (planned Phase 4.3).
 9. **Cloud Alerting**: Real-time notifications to operators via Telegram, Slack, and Email.
@@ -153,7 +153,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-|- `tests/`: **690+** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
+|- `tests/`: **712** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
@@ -175,7 +175,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `central_service/test_hitl_endpoints.py` — Cloud-persisted HITL bridge endpoints: POST /hitl/approve, GET /hitl/decision, GET /hitl/recover, GET /hitl/recover/pending (14 tests)
 - `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
 
-- Total test suite: **690+ unit tests** covering all safety layers and all Phase 3+ features.
+- Total test suite: **712 unit tests** covering all safety layers and all Phase 3+ features.
 
 ## 🧪 Testing
 
@@ -185,25 +185,35 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All **690+** tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All **712** tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 
-||| Layer | Module | Tests | What It Verifies |
-|||---|---|---|---|
-||| L0 | `gateway/core/provenance.py` | 23 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
-||| L1 | `gateway/core/scanner.py` | 14 | PII/Secrets regex matching, redaction modes, block/warn action rules |
-|| L2 | `gateway/core/guardrail.py` | 12 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
-| **L3** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides, score parsing |
-| **L4** | `gateway/core/byoc.py` | 19 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key, hard_stop vs soft_block enforcement |
-| **L5** | `gateway/core/hitl.py` | 38 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, cloud sync via Central Service, startup recovery from cloud, cleanup loop cloud decision checks, prompt_hash + provenance injection |
+|||| Layer | Module | Tests | What It Verifies |
+||||---|---|---|---|
+|||| L0 | `shared/schemas.py` | 9 | AuditEvent field validation, literal constraints, model serialization |
+|||| L0 | `gateway/core/provenance.py` | 26 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
+|||| L0 | `gateway/core/provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 38 | Full provenance pipeline: extraction, serialization, trust-level checks, proxy and API server integration |
+|||| L1 | `gateway/core/scanner.py` | 15 | PII/Secrets regex matching, redaction modes, block/warn action rules |
+|| **L2** | `gateway/core/guardrail.py` | 14 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
+|| **L2** | `gateway/core/guardian_client.py` | 8 | Guardian client protocol: build_request, parse_score, load_prompts |
+|| **L3** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides |
+|| **L3** | `gateway/core/byoc.py` | 17 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key, hard_stop vs soft_block enforcement |
+|| **L3** | `gateway/core/byoc_cloud.py` + `gateway/core/byoc_sync.py` | 30 | BYOC cloud sync: dynamic reload, per-key overrides, background sync loop, source attribution |
+|| **L4** | `gateway/core/hitl.py` | 28 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, cloud sync, cleanup loop, prompt_hash + provenance injection |
+|| **L4** | `gateway/core/hitl_cloud.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 45 | HITL cloud sync, approval, recovery, cleanup loop cloud decision checks, prompt_hash + provenance injection |
+|| **L5.1** | `gateway/core/schema_validator.py` | 22 | CaMeL JSON schema validation for tool parameters, hot-reload |
+|| **L5.2** | `gateway/core/agency_controller.py` | 17 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |
+|| **L6** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies |
+|| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement |
 || — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
-|| — | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer fallback, buffer replay on reconnect |
+|| — | `gateway/core/audit.py` | 15 | Async queueing, JSONL buffer fallback, buffer replay on reconnect, prompt hashing |
 || — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
-||| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
-||| Cloud | `central-service/api_server.py` | 11 | Severity mapping from event_type+component, settings YAML loading |
-||| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
-||| Cloud | `central-service/partition_manager.py` | ~20 | Partition lifecycle: archive→MinIO, drop, create future, error handling, year rollover |
+|||| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
+|||| Cloud | `central-service/api_server.py` | 13 | Severity mapping from event_type+component, settings YAML loading, cloud HITL endpoints |
+|||| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+|||| Cloud | `central-service/partition_manager.py` | 18 | Partition lifecycle: archive→MinIO, drop, create future, error handling |
+|||| Cloud | `central-service/dashboard_*` + `test_hitl_endpoints.py` + `test_settings_history.py` + `test_settings_audit_extended.py` + `test_templates.py` + `test_port_config.py` | 72 | Dashboard HITL/BYOC/audit/gateways/heartbeat/settings endpoints, cloud HITL bridge, settings history, notification templates |
 
 ### Migration from standalone scripts
 

@@ -81,7 +81,7 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 | `never_override_system_prompt` | No prompt injection or system prompt manipulation allowed by user input. | Pre-flight block |
 | `max_tool_calls_per_minute` | Rate limit on tool invocations per API key to prevent abuse. | Guardian soft-block + alert |
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* all other safety checks (Guardian scoring, provenance verification, PII scanning) are complete. They serve as the final authority — a hard enforcement boundary that blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
+**Enforcement hierarchy:** BYOC stop-limits apply after all other pre-flight safety checks (Guardian scoring, provenance verification, PII scanning, function-call detection) are complete. They serve as an important enforcement boundary — a hard safety floor. However, BYOC is not the final layer: HITL middleware (Layer 4) executes after BYOC in the inbound pipeline and requires explicit human approval for irreversible actions. Post-response layers (Ingestion Sanitizer L2+, Thinking Mode L6, Output Control L6B) execute on the response path after the LLM generates output.
 
 ### 8. Defense-in-Depth Summary (Updated v1.1, Phase 4.2 added)
 
@@ -95,7 +95,7 @@ BYOC rules represent hard boundaries that no model decision can override — eve
 ||| Provenance verification | Schema enforcement | At ingestion and every checkpoint | Trace origin of all data; enable trust-gated decisions |
 |||| PII/Secrets scanning | Regex + entropy scoring (via `asyncio.to_thread()`) | Sequential in pipeline (Sequence A/B/C) | Detect and redact sensitive data; configurable block/warn via `SCAN_ACTION_MODE` |
 ||| CaMeL separation | JSON schema validation | Before tool execution | Prevent untrusted content from becoming executable logic |
-||| **L7: Agency constraints** | Delegation depth + chain integrity | Pre-forward on delegation | Prevent recursive injection through sub-agent chains |
+||| **L5.2: Agency constraints** | Delegation depth + chain integrity | Pre-forward on delegation | Prevent recursive injection through sub-agent chains |
 ||| **Output validation (LLM05)** | Schema validation + HTML/text escaping — ensure model output is treated as data, not code, preventing shell/browser/DB injection when passed to downstream tools | Before *any* downstream use | Prevent OWASP LLM05: validate and encode model responses before they flow into any tool, pipeline, or storage |
 
 ---
@@ -324,7 +324,7 @@ The key advantage: Guardian's `no` score is programmatically parseable — it's 
 
 ## Testing & Verification
 
-### Pytest Test Suite — 730 Unit Tests
+### Pytest Test Suite — 712 Unit Tests
 
 All safety layers are covered by unit tests that mock external dependencies (Guardian API, PostgreSQL, Telegram, Slack, SMTP). Run with:
 
@@ -336,20 +336,30 @@ pytest tests/ -v
 ### Layer-by-Layer Test Coverage
 
 || Safety Layer | Module | Tests | What's Verified |
-|---|---|---|---|
-| **Provenance (L0)** | `gateway/core/provenance.py` | 23 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
-| **Schema (L0)** | `shared/schemas.py` | 10 | AuditEvent field validation, literal constraints, model serialization |
-| **PII Scanner (L1)** | `gateway/core/scanner.py` | 14 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
-| **Ingestion Sanitizer (L2+)** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes (strip/redact/log_only), aggressive mode, provenance tracking, Unicode NFC normalization
-| **Guardian (L2)** | `gateway/core/guardrail.py` | 12 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500 handling, timeout handling, payload shape |
-| **BYOC (L3)** | `gateway/core/byoc.py` | 19 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-API-key rate limiting, rule summary API |
-| **HITL (L4)** | `gateway/core/hitl.py` | 26 | Pause on irreversible actions, approve/deny/expiry flow, status endpoint, RequestContext storage for resume, custom rules, notification modes |
-| **Block Response** | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes (safety violation, secret detected, HITL denied/expired), request_id inclusion |
-| **Audit Logger** | `gateway/core/audit.py` | 14 | Async queueing, JSONL buffer write, buffer replay on reconnect, flush on shutdown, queue overflow handling, prompt hashing |
-| **Proxy Pipeline** | `gateway/core/proxy.py` | 18 | End-to-end: safe pass-through, guardian block (403), byoc block (403), HITL pause (202), path normalization, streaming detection |
-| **Alert Engine** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji mapping (🔴🟠🟡⚪), unknown severity silence, empty channels no-crash, credential warnings |
-| **Severity Mapping** | `api_server.py` | 11 | All event_type+component → severity mappings (CRITICAL/HIGH/WARNING/NOTICE) |
-| **Audit DB** | `audit_db.py` | 12 | DEFAULT_SETTINGS values, connection pool init, schema field alignment with SQL table |
+||---|---|---|---|
+|| **Provenance (L0)** | `gateway/core/provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 38 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
+|| **Schema (L0)** | `shared/schemas.py` | 9 | AuditEvent field validation, literal constraints, model serialization |
+|| **PII Scanner (L1)** | `gateway/core/scanner.py` | 15 | AWS key blocking, private key detection, email redaction (token/mask modes), block→warn downgrade, custom rules |
+|| **Ingestion Sanitizer (L2+)** | `gateway/core/sanitizer.py` | 24 | IngestionSanitizer: 12 patterns, action modes (strip/redact/log_only), aggressive mode, provenance tracking, Unicode NFC normalization |
+|| **Guardian (L2)** | `gateway/core/guardrail.py` | 14 | Score parsing (yes/no/case-insensitive), 4 fail-strategies (block/allow/warn/fallback), HTTP 500 handling, timeout handling, payload shape |
+|| **Guardian Client (L2)** | `gateway/core/guardian_client.py` | 8 | Guardian client protocol: build_request, parse_score, load_prompts |
+|| **BYOC (L3)** | `gateway/core/byoc.py` | 17 | Pattern matching (exfiltration, prompt injection), hard_stop vs soft_block, per-API-key rate limiting, rule summary API |
+|| **BYOC Cloud Sync (L3)** | `gateway/core/byoc_cloud.py` + `gateway/core/byoc_sync.py` | 30 | BYOC cloud sync: dynamic reload, per-key overrides, background sync loop, source attribution |
+|| **Function-Call Detector (L3.5)** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides |
+|| **HITL (L4)** | `gateway/core/hitl.py` | 28 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, custom rules, notification modes |
+|| **HITL Cloud (L4)** | `gateway/core/hitl_cloud.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 45 | HITL cloud sync, approval, recovery, cleanup loop, prompt_hash + provenance injection |
+|| **CaMeL Schema (L5.1)** | `gateway/core/schema_validator.py` | 22 | CaMeL JSON schema validation for tool parameters, hot-reload |
+|| **Agency Controller (L5.2)** | `gateway/core/agency_controller.py` | 17 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |
+|| **Thinking Mode (L6)** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies |
+|| **Output Control (L6B)** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement |
+|| **Block Response** | `gateway/core/block.py` | 5 | Standardized 403 JSON across all BlockReason codes (safety violation, secret detected, HITL denied/expired), request_id inclusion |
+|| **Audit Logger** | `gateway/core/audit.py` | 15 | Async queueing, JSONL buffer write, buffer replay on reconnect, flush on shutdown, queue overflow handling, prompt hashing |
+|| **Proxy Pipeline** | `gateway/core/proxy.py` | 18 | End-to-end: safe pass-through, guardian block (403), byoc block (403), HITL pause (202), path normalization, streaming detection |
+|| **Gateway Heartbeat & Settings** | `gateway/core/gateway_heartbeat.py` + `gateway/core/settings_poll.py` + `gateway/core/wiring.py` | 23 | Gateway heartbeat, settings polling, wiring integration |
+|| **Alert Engine** | `central-service/alert_engine.py` | 17 | Telegram/Slack/Email dispatch, severity→emoji mapping (🔴🟠🟡⚪), unknown severity silence, empty channels no-crash, credential warnings |
+|| **Severity Mapping** | `central-service/api_server.py` | 13 | All event_type+component → severity mappings (CRITICAL/HIGH/WARNING/NOTICE) |
+|| **Audit DB** | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS values, connection pool init, schema field alignment with SQL table |
+|| **Dashboard & Cloud HITL** | `central-service/test_dashboard_hitl.py` + `test_dashboard_byoc.py` + `test_dashboard_audit.py` + `test_dashboard_gateways.py` + `test_dashboard_heartbeat.py` + `test_dashboard_settings.py` + `test_hitl_endpoints.py` + `test_settings_history.py` + `test_settings_audit_extended.py` + `test_templates.py` + `test_port_config.py` | 72 | Dashboard HITL/BYOC/audit/gateways/heartbeat/settings endpoints, cloud HITL bridge, settings history, notification templates |
 
 ### Standalone Verification Scripts → Pytest Migration
 

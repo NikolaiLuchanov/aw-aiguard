@@ -22,12 +22,12 @@ Per `summary.md`, attacker objectives fall into **4 categories**. Each maps to a
 
 | # | Attack Goal | What It Means | Countermeasure Layer |
 |---|---|---|---|
-| 1 | **Data exfiltration** | Agent sends secrets, credentials, or private data outward | L1 PII Scanner + L4 BYOC `never_exfiltrate` + L5 HITL |
-| 2 | **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L5 HITL Gate (irreversible action detection) + L4 BYOC |
-| 3 | **Quiet commands** | Prompt instructs agent to skip confirmation or act silently | L4 BYOC `never_override_system_prompt` + L5 HITL (always-on confirmation) |
+| 1 | **Data exfiltration** | Agent sends secrets, credentials, or private data outward | L1 PII Scanner + L3 BYOC `never_exfiltrate` + L4 HITL |
+| 2 | **Action hijack** | Agent commits, deletes, sends, or charges without user intent | L4 HITL Gate (irreversible action detection) + L3 BYOC |
+| 3 | **Quiet commands** | Prompt instructs agent to skip confirmation or act silently | L3 BYOC `never_override_system_prompt` + L4 HITL (always-on confirmation) |
 | 4 | **Answer manipulation** | Fact substitution, recommendation poisoning, or false context injection | L6 Post-response thinking + L6B LLM05 output control |
 
-**Indirect (data-borne) injection** is the most dangerous threat class: instead of attacking the user's prompt directly, the attacker poisons an external data source (web page, RAG document, GitHub comment) that the agent later ingests. The injection fires when the agent reads that content. Provenance tagging (L0) + trust-gated Guardian checks (L2) are the primary countermeasure — low-trust data triggers stricter Guardian scoring and mandatory HITL on writes. Stored injection prevention (Phase 4.2) is planned to sanitize ingested content at the point of RAG ingestion.
+**Indirect (data-borne) injection** is the most dangerous threat class: instead of attacking the user's prompt directly, the attacker poisons an external data source (web page, RAG document, GitHub comment) that the agent later ingests. The injection fires when the agent reads that content. Provenance tagging (L0) + trust-gated Guardian checks (L2) are the primary countermeasure — low-trust data triggers stricter Guardian scoring and mandatory HITL on writes. Stored injection prevention (Phase 4.2) is implemented — `IngestionSanitizer` sanitizes ingested content at the point of RAG ingestion.
 
 ---
 
@@ -156,7 +156,7 @@ This allows the same `scan_rules.yaml` to behave as a strict blocker in producti
 **Goal:** *Block malicious or harmful intent before execution.*  
 Every single payload hits the guardrail *before* the tool is invoked. The proxy sends the prompt to the **cloud Guardian server**, which scores it. If `granite4.1-guardian` returns `no`, execution is immediately halted locally. The response is blocked, and an event is fired asynchronously to the Central Alert Engine (Slack/Telegram).
 
-### Layer 3: Function-Calling Hallucination Detection (Phase 4.1 ✅)
+### Layer 3.5: Function-Calling Hallucination Detection (Phase 4.1 ✅)
 **Goal:** *Detect fabricated tool calls that look structurally valid but are semantically injected.*
 
 Granite Guardian 8B reports **0.79 BAcc on function-calling hallucination detection**. When the LLM proposes tool calls — especially with low-trust provenance data in context — the model may fabricate parameters or invent tool calls entirely. This layer catches fabricated tool calls that pass the general Guardian safety check (Layer 2) but are injected or hallucinated.
@@ -176,7 +176,9 @@ Granite Guardian 8B reports **0.79 BAcc on function-calling hallucination detect
 
 **Block response:** Returns `403` with `reason: "FUNCTION_CALL_HALLUCINATION"`, `blocked_by: "function_call_detector"`. Alert fires at `CRITICAL` severity.
 
-### Layer 4: BYOC Stop-Limits (Final Authority)
+---
+
+### Layer 3: BYOC Pre-Execution Enforcement
 
 **Goal:** *Codify explicit "never do this" rules that override any other safety check, including Guardian scores.*
 
@@ -184,13 +186,15 @@ A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no mod
 
 **Implementation:** `gateway/core/byoc.py` — loads structured rules from `guardrail-config/byoc_rules.yaml`. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 4 in the proxy pipeline (after PII → Guardian → Function-Call Detector).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection are complete. They enforce hard boundaries: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC and Schema Validator + Agency Controller in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
 - `soft_block`: Log warning + alert, request continues (e.g. `max_tool_calls_per_minute`)
 
-### Layer 5: Human-in-the-Loop (HITL) Gate
+---
+
+### Layer 4: Human-in-the-Loop (HITL) Gate
 
 **Goal:** *Require explicit human approval before any irreversible or outbound action executes.*
 
@@ -206,7 +210,7 @@ A BYOC (Bring Your Own Criteria) rule engine defines hard boundaries that no mod
 
 **Implementation state:** Implemented in Phase 1.5/1.6.
 
-### Layer 6: Post-Processing Thinking-Mode Verification (New in v1.1)
+### Layer 6: Post-Processing Thinking-Mode Verification ✅ Implemented (Phase 4.4)
 
 **Goal:** *Re-evaluate the final LLM output against BYOC rules using deep reasoning.* 
 
@@ -236,7 +240,7 @@ After the main LLM generates a full response and passes the pre-flight guardrail
 
 ---
 
-### Layer 7: Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)
+### Layer 5.2: Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)
 
 **Goal:** *Prevent recursive injection through sub-agent delegation chains by enforcing max-hop depth limits and chain integrity validation.*
 
@@ -266,7 +270,7 @@ After the main LLM generates a full response and passes the pre-flight guardrail
 - `require_approval_for` (list) — tools requiring explicit HITL approval
 - `mcp_server_vetting` — mode (`allowlist`/`blocklist`), allowlist, blocklist
 
-**Tests:** 12 unit tests in `test_agency_controller.py`, 10 integration tests in `test_phase4_integration.py`.
+**Tests:** 17 unit tests in `test_agency_controller.py`, 13 integration tests in `test_phase4_integration.py`.
 
 **Hot-reload:** `AgencyController.reload_rules()` supports live rule updates without restart.
 
@@ -291,7 +295,7 @@ Every audit log entry and payload MUST include a `provenance` object with the fo
 2. **Trust-gated operations:** Low-trust content (e.g., `trust_level < 0.5`) triggers additional Guardian checks, tighter BYOC validation, and mandatory HITL gates before any write/deliver operation.
 3. **Post-processing verification with trust awareness:** When using thinking-mode Guardian (Section 4, Layer 6), low-trust provenance increases scrutiny — the model flags outputs that amplify or retransmit untrusted data in new forms.
 4. **Audit log provenance carry-through:** Every downstream transformation carries the original provenance chain forward so root-cause attribution is always possible.
-5. **Agency chain tracking (Phase 4.5.2):** Each delegation hop adds a record to `source_chain` and increments `hop_depth`. Max depth (default 3) prevents recursive injection through sub-agent chains.
+5. **Agency chain tracking (Phase 4.6):** Each delegation hop adds a record to `source_chain` and increments `hop_depth`. Max depth (default 3) prevents recursive injection through sub-agent chains.
 
 **Never do this (stop-limits applied to provenance):**
 - Never allow high-trust and low-trust content into the same prompt context without explicit tagging of provenance boundaries.
@@ -325,7 +329,7 @@ A BYOC (Bring Your Own Criteria) rule engine sits at the intersection of pre-fli
 
 **Implementation:** `gateway/core/byoc.py` — dual-source rule engine (Phase 3.2). Loads base rules from `guardrail-config/byoc_rules.yaml` on startup, then merges with cloud rules from PostgreSQL `byoc_rules` table (fetched via `GET /dashboard/byoc/rules` every `BYOC_SYNC_INTERVAL` seconds). Per-developer overrides from `settings_override` table can soft-disable individual rules (e.g., `byoc_rule_never_exfiltrate_disabled`). Merge precedence: cloud replaces local by name; overrides remove. Each rule has a name, regex pattern, enforcement level, and severity. The engine runs as Step 4 in the proxy pipeline (after PII → Guardian → Function-Call Detector).
 
-**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection (Layer 3) are complete. They serve as the final authority: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 5), which sits after BYOC in the pipeline and requires explicit human approval.
+**Enforcement hierarchy:** BYOC stop-limits apply *after* PII scanning, Guardian scoring, and function-call hallucination detection (Layer 3.5) are complete. They enforce hard boundaries: even if all other checks pass and a Guardian score is "yes", any BYOC rule violation blocks execution immediately. Irreversible actions (deletion, commits, payments, outbound messages) are handled independently by the HITL middleware gate (Layer 4), which sits after BYOC in the pipeline and requires explicit human approval.
 
 **Two enforcement levels:**
 - `hard_stop`: Immediate 403 block, no override possible (e.g. `never_exfiltrate`)
@@ -374,7 +378,7 @@ Summary defines stored injection as data that *"settles in the agent's memory, a
 
 ---
 
-### 7D: Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)
+### Layer 5.2: Agency Constraints — Sub-Agent Chain Depth Limits ✅ Implemented (Phase 4.6)
 
 **Goal:** Prevent recursive injection through sub-agent delegation chains by enforcing max-hop depth limits and chain integrity validation.
 
@@ -409,7 +413,7 @@ Summary defines stored injection as data that *"settles in the agent's memory, a
 - `require_approval_for` (list) — tools requiring explicit HITL approval
 - `mcp_server_vetting` — mode (`allowlist`/`blocklist`), allowlist, blocklist
 
-**Tests:** 12 unit tests in `test_agency_controller.py`, 10 integration tests in `test_phase4_integration.py`.
+**Tests:** 17 unit tests in `test_agency_controller.py`, 13 integration tests in `test_phase4_integration.py`.
 
 **Architecture diagram:** Agency Controller (P5) added to Mermaid workflow diagram with purple styling (#7b1fa2).
 
@@ -557,8 +561,8 @@ aw-aiguard/
 | P2 | Remote async audit pipeline (Phase 2.2) | Planned | Wire `AuditLogger` into gateway proxy |
 | P2 | Provenance tagging schema + enforcement (Section 5) | ✅ Phase 2.5 | Pairs with audit infrastructure |
 | P2 | Centralized config sync (Section 9) | ✅ Phase 3.4 | Gateway heartbeat, settings poll loop, diff detection, hot-reload |
-||| P2 | Sub-agent chain depth limit logic (Section 7A) | ✅ Phase 4.5.2 | AgencyController enforces max depth with provenance chain tracking |
-||| P2 | Data/command separation schemas (Section 3.5) | ✅ Phase 4.5.1 | SchemaValidator validates all tool-call parameters against JSON schemas |
+|||| P2 | Sub-agent chain depth limit logic (Section 7A) | ✅ Phase 4.6 | AgencyController enforces max depth with provenance chain tracking |
+|||| P2 | Data/command separation schemas (Section 3.5) | ✅ Phase 4.5 | SchemaValidator validates all tool-call parameters against JSON schemas |
 | P3 | Red-team adversarial testing (Phase 5.1) | ✅ 85 tests | All attacks blocked, zero false positives |
 | P4 | Performance benchmarking (Phase 5.2) | Pending | Latency baseline and optimization |
 | P5 | Documentation & handover (Phase 5.3) | ✅ Complete | 5 new docs + 9 updated docs |

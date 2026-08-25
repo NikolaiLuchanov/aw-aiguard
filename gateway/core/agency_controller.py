@@ -1,12 +1,12 @@
 """
-Agency Constraints — Delegation Depth Limits & Chain Integrity (Phase 4.5.2)
+Agency Constraints — Delegation Depth Limits & Chain Integrity (Phase 4.6)
 
 Controls sub-agent delegation depth, chain continuity, and tool-level approval
 requirements to prevent recursive injection attacks across agent chains.
 
 Rules loaded from guardrail-config/agency_rules.yaml.
 
-Phase 4.5.2 deliverable — Layer L7 of the safety pipeline.
+Phase 4.6 deliverable — Layer L5.2 of the safety pipeline.
 """
 
 import logging

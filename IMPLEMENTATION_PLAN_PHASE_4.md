@@ -11,12 +11,12 @@
 
 | Sub-Phase | Module | Safety Layer | Threat Mitigated | Estimated Tests |
 |---|---|---|---|---|
-| **4.1** | Function-Calling Hallucination | L2+ (Guardian function mode) | Action hijack via fabricated tool calls | 15 |
-| **4.2** | Stored Injection Countermeasures | L2+ (Ingestion sanitization) | Poisoned RAG / stored injection | ✅ Complete (24 tests) |
-| **4.3** | LLM05 Output Control | L6 (Output schema + escaping) | Answer manipulation, shell/DB injection | ✅ Complete (25 tests) |
-| **4.4** | Thinking-Mode Verification | L5 (Selective deep reasoning) | Subtle injection, fact substitution | 14 |
-| **4.5** | CaMeL Structural Enforcement | L0/L4 (JSON schema validation) | Data-as-code injection | 20 |
-| **4.6** | Agency Constraints | L7 (Delegation depth limits) | Sub-agent chain escalation | 12 |
+| **4.1** | Function-Calling Hallucination | L2+ (Guardian function mode) | Action hijack via fabricated tool calls | **17** |
+|| **4.2** | Stored Injection Countermeasures | L2+ (Ingestion sanitization) | Poisoned RAG / stored injection | ✅ Complete (24 tests) |
+|| **4.3** | LLM05 Output Control | L6 (Output schema + escaping) | Answer manipulation, shell/DB injection | ✅ Complete (25 tests) |
+|| **4.4** | Thinking-Mode Verification | L5 (Selective deep reasoning) | Subtle injection, fact substitution | **23** |
+|| **4.5** | CaMeL Structural Enforcement | L0/L4 (JSON schema validation) | Data-as-code injection | **22** |
+|| **4.6** | Agency Constraints | L7 (Delegation depth limits) | Sub-agent chain escalation | **17** |
 
 ---
 
@@ -61,25 +61,27 @@ The function-call hallucination check sits between Guardian fast-mode (L2) and B
    - Add `component="function_call_detector"` to severity mapping → `CRITICAL`
    - Alert on hallucination events (Telegram + Slack + Email)
 
-### Tests (`tests/gateway/test_function_call_detector.py`) — 15 tests
+### Tests (`tests/gateway/test_function_call_detector.py`) — 17 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_hallucination_detected_blocks` | Guardian `no` → 403 block with correct JSON |
-| 2 | `test_hallucination_legitimate_passes` | Guardian `yes` → request forwarded |
-| 3 | `test_no_tool_calls_skips_check` | Plain text response bypasses detector |
-| 4 | `test_high_trust_skips_check` | `trust_level >= 0.5` bypasses detector |
-| 5 | `test_guaradian_timeout_allows_with_warn` | HTTP 500/timeout → fallback `warn` strategy |
-| 6 | `test_empty_arguments_blocked` | Guardian flags empty/missing arguments as suspicious |
-| 7 | `test_injected_parameter_detected` | Guardian detects parameter injection pattern |
-| 8 | `test_multiple_tool_calls_all_checked` | Each tool call independently validated |
-| 9 | `test_hallucination_logged_to_audit` | Audit entry with correct component/tag |
-| 10 | `test_alert_triggered_on_block` | Alert engine fires on hallucination detection |
-| 11 | `test_rule_config_low_trust_threshold` | Custom `trust_level` threshold from YAML |
-| 12 | `test_rule_config_per_tool_override` | Per-tool bypass/enforce from YAML |
-| 13 | `test_streaming_response_tool_calls` | Tool calls extracted from streaming chunks |
-| 14 | `test_guaradian_payload_shape` | Correct JSON shape sent to Guardian API |
-| 15 | `test_case_insensitive_score_parsing` | `YES/yes/Yes` all parsed correctly |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_hallucination_detected_blocks` | Guardian `no` → 403 block with correct JSON |
+|| 2 | `test_hallucination_legitimate_passes` | Guardian `yes` → request forwarded |
+|| 3 | `test_no_tool_calls_skips_check` | Plain text response bypasses detector |
+|| 4 | `test_high_trust_skips_check` | `trust_level >= 0.5` bypasses detector |
+|| 5 | `test_guaradian_timeout_allows_with_warn` | HTTP 500/timeout → fallback `warn` strategy |
+|| 6 | `test_empty_arguments_blocked` | Guardian flags empty/missing arguments as suspicious |
+|| 7 | `test_injected_parameter_detected` | Guardian detects parameter injection pattern |
+|| 8 | `test_multiple_tool_calls_all_checked` | Each tool call independently validated |
+|| 9 | `test_hallucination_logged_to_audit` | Audit entry with correct component/tag |
+|| 10 | `test_alert_triggered_on_block` | Alert engine fires on hallucination detection |
+|| 11 | `test_rule_config_low_trust_threshold` | Custom `trust_level` threshold from YAML |
+|| 12 | `test_rule_config_per_tool_override` | Per-tool bypass/enforce from YAML |
+|| 13 | `test_streaming_response_tool_calls` | Tool calls extracted from streaming chunks |
+|| 14 | `test_guaradian_payload_shape` | Correct JSON shape sent to Guardian API |
+|| 15 | `test_case_insensitive_score_parsing` | `YES/yes/Yes` all parsed correctly |
+|| 16 | `test_check_safety_prompt_shape` | Guardian safety prompt contains correct tool-call JSON |
+|| 17 | `test_http_500_blocks_by_default` | HTTP 500 → fallback `block` strategy (not allow) |
 
 ### Documentation Updates
 
@@ -162,26 +164,32 @@ A new ingestion sanitization layer (`IngestionSanitizer`) runs in the proxy pipe
 
 ### Tests (`tests/gateway/test_sanitizer.py`) — 24 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_script_tag_stripped` | `<script>alert(1)</script>` → empty |
-| 2 | `test_zero_width_chars_removed` | Unicode zero-width chars stripped |
-| 3 | `test_css_hiding_redacted` | CSS hide pattern replaced with `[REDACTED]` |
-| 4 | `test_html_comment_injection_stripped` | Comment with injection keywords removed |
-| 5 | `test_base64_logged_not_stripped` | Long base64 strings preserved, logged |
-| 6 | `test_clean_content_unchanged` | Normal text passes through unmodified |
-| 7 | `test_mixed_content_sanitized` | Multiple dangerous patterns handled in one pass |
-| 8 | `test_nested_script_tags` | Nested/recursive `<script>` handled |
-| 9 | `test_rule_config_strip_action` | `action: strip` removes content |
-| 10 | `test_rule_config_redact_action` | `action: redact` replaces with marker |
-| 11 | `test_rule_config_log_only_action` | `action: log_only` preserves but flags |
-| 12 | `test_provenance_sanitization_metadata` | `sanitization_applied` and `dangerous_patterns` tracked |
-| 13 | `test_low_trust_aggressive_mode` | `trust_level < 0.5` triggers all actions including strip |
-| 14 | `test_audit_entry_created` | Audit log with component and pattern list |
-| 15 | `test_alert_on_dangerous_patterns` | Alert fires for `severity: high` patterns |
-| 16 | `test_custom_rule_addition` | User can add custom patterns via YAML |
-| 17 | `test_empty_input_handled` | Empty/None content doesn't crash |
-| 18 | `test_unicode_normalization` | Unicode NFC/NFD normalization before pattern matching |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_script_tag_stripped` | `<script>alert(1)</script>` → empty |
+|| 2 | `test_zero_width_chars_removed` | Unicode zero-width chars stripped |
+|| 3 | `test_css_hiding_redacted` | CSS hide pattern replaced with `[REDACTED]` |
+|| 4 | `test_html_comment_injection_stripped` | Comment with injection keywords removed |
+|| 5 | `test_base64_logged_not_stripped` | Long base64 strings preserved, logged |
+|| 6 | `test_clean_content_unchanged` | Normal text passes through unmodified |
+|| 7 | `test_mixed_content_sanitized` | Multiple dangerous patterns handled in one pass |
+|| 8 | `test_nested_script_tags` | Nested/recursive `<script>` handled |
+|| 9 | `test_meta_redirect_stripped` | `<meta http-equiv="refresh">` removed |
+|| 10 | `test_iframe_stripped` | `<iframe>` tag removed from content |
+|| 11 | `test_event_handler_stripped` | `onerror`, `onload` JS handlers removed |
+|| 12 | `test_empty_input_handled` | Empty/None content doesn't crash |
+|| 13 | `test_rule_config_strip_action` | `action: strip` removes content |
+|| 14 | `test_rule_config_redact_action` | `action: redact` replaces with marker |
+|| 15 | `test_rule_config_log_only_action` | `action: log_only` preserves but flags |
+|| 16 | `test_custom_rule_addition` | User can add custom patterns via YAML |
+|| 17 | `test_provenance_sanitization_metadata` | `sanitization_applied` and `dangerous_patterns` tracked |
+|| 18 | `test_low_trust_aggressive_mode` | `trust_level < 0.5` triggers all actions including strip |
+|| 19 | `test_high_trust_no_aggressive` | `trust_level >= 0.5` skips aggressive stripping |
+|| 20 | `test_audit_entry_created` | Audit log with component and pattern list |
+|| 21 | `test_alert_on_dangerous_patterns` | Alert fires for `severity: high` patterns |
+|| 22 | `test_unicode_normalization` | Unicode NFC/NFD normalization before pattern matching |
+|| 23 | `test_sanitization_result_defaults` | Result object has correct defaults |
+|| 24 | `test_rules_summary` | Config summary includes active pattern count |
 
 ### Documentation Updates
 
@@ -389,24 +397,33 @@ The thinking-mode verification runs *after* the LLM response is received, in the
    - No new block reasons — thinking mode is advisory, not blocking (it's a post-delivery check)
    - Add `BlockReason.THINKING_MODE_WARNING` for logging purposes only
 
-### Tests (`tests/gateway/test_thinking_mode.py`) — 14 tests
+### Tests (`tests/gateway/test_thinking_mode.py`) — 23 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_low_trust_triggers_check` | `trust_level < 0.5` → thinking mode invoked |
-| 2 | `test_irreversible_action_triggers_check` | Delete/send/commit/deploy → thinking mode invoked |
-| 3 | `test_high_trust_skips_check` | `trust_level >= 0.5` and non-irreversible → skipped |
-| 4 | `test_stricter_threshold_triggers` | `trust_level < 0.3` → thinking mode invoked |
-| 5 | `test_thinking_mode_passes` | Guardian `yes` → response delivered normally |
-| 6 | `test_thinking_mode_warns_on_fail` | Guardian `no` → warning alert, response still delivered |
-| 7 | `test_thinking_mode_timeout_warns` | Timeout → warn strategy applied |
-| 8 | `test_thinking_mode_http_500_warns` | Server error → warn strategy applied |
-| 9 | `test_custom_threshold_from_yaml` | Configurable threshold from YAML applied |
-| 10 | `test_custom_actions_from_yaml` | User-defined irreversible action list from YAML |
-| 11 | `test_audit_entry_created` | Audit log with thinking mode result |
-| 12 | `test_alert_triggered_on_thinking_mode_fail` | Alert engine fires on thinking-mode `no` |
-| 13 | `test_case_insensitive_score_parsing` | `YES/yes` parsed correctly |
-| 14 | `test_response_included_in_alert` | Alert payload includes the flagged response |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_defaults` | `ThinkingModeConfig` has correct defaults (threshold 0.5, timeout 5s) |
+|| 2 | `test_custom_values` | `ThinkingModeConfig` accepts custom values |
+|| 3 | `test_from_yaml_missing_file` | Graceful handling of missing YAML config |
+|| 4 | `test_from_yaml_custom_values` | YAML config loaded correctly |
+|| 5 | `test_from_yaml_empty_file` | Empty YAML file uses defaults |
+|| 6 | `test_from_yaml_partial_file` | Partial YAML file fills missing values with defaults |
+|| 7 | `test_low_trust_triggers_check` | `trust_level < 0.5` → thinking mode invoked |
+|| 8 | `test_stricter_threshold_triggers` | `trust_level < 0.3` → thinking mode invoked |
+|| 9 | `test_mandatory_action_triggers` | Irreversible action → thinking mode invoked regardless of trust |
+|| 10 | `test_high_trust_non_irreversible_skips` | High trust + safe action → skipped |
+|| 11 | `test_high_trust_empty_action_skips` | High trust + no action type → skipped |
+|| 12 | `test_exactly_at_threshold_skips` | `trust_level == threshold` → skipped (not triggered) |
+|| 13 | `test_custom_threshold_triggers` | Custom 0.3 threshold correctly gates invocation |
+|| 14 | `test_custom_mandatory_actions_triggers` | User-defined irreversible actions trigger check |
+|| 15 | `test_thinking_mode_passes` | Guardian `yes` → response delivered normally |
+|| 16 | `test_thinking_mode_warns_on_fail` | Guardian `no` → warning alert, response still delivered |
+|| 17 | `test_thinking_mode_timeout_warns` | Timeout → warn strategy applied |
+|| 18 | `test_thinking_mode_http_500_warns` | Server error → warn strategy applied |
+|| 19 | `test_fail_strategy_block` | `fail: block` → blocks response instead of warning |
+|| 20 | `test_thinking_timeout_increased` | Custom 30s timeout passed to Guardian |
+|| 21 | `test_verify_sent_to_guardian_with_think_true` | Guardian called with `think: true` |
+|| 22 | `test_summarize_config` | Config summary returns correct active values |
+|| 23 | `test_thinking_mode_case_insensitive_score_parsing` | `YES/yes/Yes` all parsed correctly |
 
 ### Documentation Updates
 
@@ -525,30 +542,32 @@ A structured schema validation layer sits between the function-call hallucinatio
 6. **Update `central-service/api_server.py`**
    - Add `component="schema_validator"` to severity mapping → `CRITICAL`
 
-### Tests (`tests/gateway/test_schema_validator.py`) — 20 tests
+### Tests (`tests/gateway/test_schema_validator.py`) — 22 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_terminal_command_valid` | Valid terminal command → passes |
-| 2 | `test_terminal_command_injection_blocked` | Command with `; rm -rf` → schema pattern fail |
-| 3 | `test_browser_url_valid` | Valid URL → passes |
-| 4 | `test_browser_url_malformed_blocked` | Invalid URL format → fails |
-| 5 | `test_delegate_task_valid` | Valid task string → passes |
-| 6 | `test_delegate_task_too_long_blocked` | Task > 4096 chars → maxLength fail |
-| 7 | `test_missing_required_field_blocked` | Missing `command` in terminal → required fail |
-| 8 | `test_wrong_type_blocked` | `timeout` as string → type fail |
-| 9 | `test_out_of_range_blocked` | `timeout` > 3600 → minimum/maximum fail |
-| 10 | `test_unknown_tool_skips_validation` | Unknown tool → pass-through |
-| 11 | `test_schema_validation_logged` | Audit entry with component and validation result |
-| 12 | `test_byoc_hard_stop_on_validation` | `validate_all_tool_schemas` violation → 403 |
-| 13 | `test_custom_tool_schema` | User-defined schema for custom tool |
-| 14 | `test_nested_properties_validated` | Nested object properties validated |
-| 15 | `test_format_uri_validation` | URI format constraint enforced |
-| 16 | `test_pattern_constraint_enforced` | Regex pattern constraint enforced |
-| 17 | `test_empty_parameters_passes` | Empty params → schema allows |
-| 18 | `test_extra_properties_allowed` | Additional properties not in schema → pass (draft7 default) |
-| 19 | `test_schema_load_from_yaml` | YAML schemas loaded correctly at startup |
-| 20 | `test_validation_error_details` | 403 response includes field-level error messages |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_terminal_command_valid` | Valid terminal command → passes |
+|| 2 | `test_terminal_command_injection_blocked` | Command with `; rm -rf` → schema pattern fail |
+|| 3 | `test_browser_url_valid` | Valid URL → passes |
+|| 4 | `test_browser_url_malformed_blocked` | Invalid URL format → fails |
+|| 5 | `test_delegate_task_valid` | Valid task string → passes |
+|| 6 | `test_delegate_task_too_long_blocked` | Task > 4096 chars → maxLength fail |
+|| 7 | `test_missing_required_field_blocked` | Missing `command` in terminal → required fail |
+|| 8 | `test_wrong_type_blocked` | `timeout` as string → type fail |
+|| 9 | `test_out_of_range_blocked` | `timeout` > 3600 → minimum/maximum fail |
+|| 10 | `test_unknown_tool_skips_validation` | Unknown tool → pass-through |
+|| 11 | `test_schema_validation_logged` | Audit entry with component and validation result |
+|| 12 | `test_byoc_hard_stop_on_validation` | `validate_all_tool_schemas` violation → 403 |
+|| 13 | `test_custom_tool_schema` | User-defined schema for custom tool |
+|| 14 | `test_nested_properties_validated` | Nested object properties validated |
+|| 15 | `test_format_uri_validation` | URI format constraint enforced |
+|| 16 | `test_pattern_constraint_enforced` | Regex pattern constraint enforced |
+|| 17 | `test_empty_parameters_passes` | Empty params → schema allows |
+|| 18 | `test_extra_properties_allowed` | Additional properties not in schema → pass (draft7 default) |
+|| 19 | `test_schema_load_from_yaml` | YAML schemas loaded correctly at startup |
+|| 20 | `test_validation_error_details` | 403 response includes field-level error messages |
+|| 21 | `test_reload_schemas` | Hot-reload of schema YAML file |
+|| 22 | `test_reload_rules` | Hot-reload of agency rules YAML file |
 
 ### Documentation Updates
 
@@ -624,22 +643,27 @@ A delegation chain depth controller monitors the `source_chain` in provenance me
 6. **Update `central-service/api_server.py` (dashboard)**
    - Add agency chain visualization to dashboard (show source_chain for each request)
 
-### Tests (`tests/gateway/test_agency_controller.py`) — 12 tests
+### Tests (`tests/gateway/test_agency_controller.py`) — 17 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_delegation_within_depth_allowed` | `hop_depth < max` → passes |
-| 2 | `test_delegation_at_depth_limit_blocked` | `hop_depth == max` → blocked |
-| 3 | `test_delegation_exceeding_depth_blocked` | `hop_depth > max` → blocked |
-| 4 | `test_chain_broken_detected` | Missing hop in source_chain → flagged |
-| 5 | `test_mcp_server_vetting_allowlist` | MCP in allowlist → passes |
-| 6 | `test_mcp_server_vetting_blocklist` | MCP in blocklist → blocked |
-| 7 | `test_approval_required_action` | Write/execute/deploy without HITL → blocked |
-| 8 | `test_increment_depth` | `hop_depth` increments correctly |
-| 9 | `test_source_chain_carry_through` | Provenance chain carried forward |
-| 10 | `test_audit_entry_on_violation` | Audit log with component and violation reason |
-| 11 | `test_custom_max_depth_from_yaml` | Configurable `max_delegation_depth` from YAML |
-| 12 | `test_default_max_depth` | Default max depth is 3 |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_delegation_within_depth_allowed` | `hop_depth < max` → passes |
+|| 2 | `test_delegation_at_depth_limit_blocked` | `hop_depth == max` → blocked |
+|| 3 | `test_delegation_exceeding_depth_blocked` | `hop_depth > max` → blocked |
+|| 4 | `test_increment_depth` | `hop_depth` increments correctly |
+|| 5 | `test_source_chain_carry_through` | Provenance chain carried forward |
+|| 6 | `test_chain_broken_detected` | Missing hop in source_chain → flagged |
+|| 7 | `test_valid_chain_not_broken` | Consecutive source_chain entries → valid |
+|| 8 | `test_single_hop_not_broken` | Single hop in source_chain → not broken |
+|| 9 | `test_approval_required_action` | Write/execute/deploy without HITL → blocked |
+|| 10 | `test_non_approval_tool_passed` | Read-only tool bypasses approval check |
+|| 11 | `test_mcp_server_vetting_allowlist` | MCP in allowlist → passes |
+|| 12 | `test_mcp_server_vetting_blocklist` | MCP in blocklist → blocked |
+|| 13 | `test_custom_max_depth_from_yaml` | Configurable `max_delegation_depth` from YAML |
+|| 14 | `test_default_max_depth` | Default max depth is 3 |
+|| 15 | `test_audit_entry_on_violation` | Audit log with component and violation reason |
+|| 16 | `test_config_summary` | Config summary returns correct active values |
+|| 17 | `test_reload_rules` | Hot-reload of agency rules YAML file |
 
 ### Documentation Updates
 
@@ -706,20 +730,23 @@ Deliver to Client
 
 **Goal:** End-to-end tests covering all Phase 4 layers working together.
 
-### Tests (`tests/gateway/test_phase4_integration.py`) — 10 tests
+### Tests (`tests/gateway/test_phase4_integration.py`) — 13 tests
 
-| # | Test | Verifies |
-|---|---|---|
-| 1 | `test_full_pipeline_low_trust` | Low-trust request → PII → Guardian → function check → schema → BYOC → HITL → thinking mode → output control |
-| 2 | `test_full_pipeline_high_trust` | High-trust request → PII → Guardian → forward (skip thinking mode, schema, function check) |
-| 3 | `test_hallucination_stops_pipeline` | Fabricated tool call → blocked at function detector, never reaches BYOC/HITL |
-| 4 | `test_stored_injection_blocked` | Poisoned RAG content → sanitizer strips patterns, alerts |
-| 5 | `test_escaped_output_delivered` | HTML in LLM output → escaped, delivered safely |
-| 6 | `test_thinking_mode_supplemental` | Thinking mode `no` → warning, response still delivered |
-| 7 | `test_schema_violation_blocks` | Malformed tool parameters → blocked at schema validator |
-| 8 | `test_delegation_depth_enforced` | 4-hop chain → blocked at hop 4 |
-| 9 | `test_multi_layer_block_response` | Multiple layer violations → correct 403 with dominant reason |
-| 10 | `test_all_layers_logged_to_audit` | Every layer writes to audit with correct component |
+|| # | Test | Verifies |
+||---|---|---|
+|| 1 | `test_full_pipeline_low_trust` | Low-trust request → PII → Guardian → function check → schema → BYOC → HITL → thinking mode → output control |
+|| 2 | `test_full_pipeline_high_trust` | High-trust request → PII → Guardian → forward (skip thinking mode, schema, function check) |
+|| 3 | `test_schema_violation_blocks` | Malformed tool parameters → blocked at schema validator |
+|| 4 | `test_delegation_depth_enforced` | 4-hop chain → blocked at hop 4 |
+|| 5 | `test_approval_required_action` | Write tool without HITL approval → blocked |
+|| 6 | `test_depth_exceeded_still_blocks` | Depth > max → blocked even with HITL approval |
+|| 7 | `test_multi_layer_block_response` | Multiple layer violations → correct 403 with dominant reason |
+|| 8 | `test_chain_broken_blocks` | Missing hop in source chain → blocked at agency controller |
+|| 9 | `test_thinking_mode_warn_logs_warn_not_block` | Thinking mode `no` → log/warn, response still delivered |
+|| 10 | `test_non_streaming_response_survives_post_forward_layers` | Non-stream response → sanitization + thinking + output control pass through |
+|| 11 | `test_unknown_tool_passes_through` | Unknown tool type → passes all layers without validation |
+|| 12 | `test_valid_deep_delegation_allowed` | Deep delegation within limits → allowed through all layers |
+|| 13 | `test_byoc_and_schema_combined` | BYOC + schema validation both apply to same request |
 
 ---
 
@@ -727,16 +754,16 @@ Deliver to Client
 
 | Sub-Phase | File | Tests |
 |---|---|---|
-| 4.1 | `test_function_call_detector.py` | 15 |
-| 4.2 | `test_sanitizer.py` | 18 |
-| 4.3 | `test_output_control.py` | 16 |
-| 4.4 | `test_thinking_mode.py` | 14 |
-| 4.5 | `test_schema_validator.py` | 20 |
-| 4.6 | `test_agency_controller.py` | 12 |
-| 4.7 | `test_phase4_integration.py` | 10 |
-| **Total** | | **105** |
+| 4.1 | `test_function_call_detector.py` | 17 |
+|| 4.2 | `test_sanitizer.py` | 24 |
+|| 4.3 | `test_output_control.py` | 25 |
+|| 4.4 | `test_thinking_mode.py` | 23 |
+|| 4.5 | `test_schema_validator.py` | 22 |
+|| 4.6 | `test_agency_controller.py` | 17 |
+|| 4.7 | `test_phase4_integration.py` | 13 |
+|| **Total** | | **141** |
 
-Expected total suite count after Phase 4: **431 + 105 = 536 tests** (current Phase 3 total + Phase 4 additions).
+| Expected total suite count after Phase 4: **571 + 141 = 712 tests** (current Phase 1–3 total + Phase 4 additions).
 
 ---
 

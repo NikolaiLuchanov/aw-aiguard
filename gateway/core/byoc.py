@@ -3,7 +3,11 @@ BYOC (Bring Your Own Criteria) Stop-Limits Engine.
 
 Codifies 'never do this' rules as hard enforcement boundaries.
 Enforcement hierarchy: BYOC applies AFTER PII scanning (L1) and Guardian scoring (L2),
-and BEFORE HITL (L4). It serves as Layer 3 — the final pre-execution authority.
+and BEFORE Schema Validator (L5.1), Agency Controller (L5.2), and HITL (L4).
+It serves as Layer 3 — a pre-execution enforcement layer.
+
+Note: BYOC is NOT the final authority. Schema Validator, Agency Controller, and HITL
+all execute after BYOC and can independently block or pause a request.
 
 Dual-source model (Phase 3.2):
   - Local YAML rules: loaded at startup from byoc_rules.yaml (always present)

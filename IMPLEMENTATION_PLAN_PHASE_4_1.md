@@ -597,7 +597,7 @@ def function_call_rules_path():
 ## 4. Test Plan
 
 **File:** `tests/gateway/test_function_call_detector.py`  
-**Total tests:** 15  
+**Total tests:** 17  
 **Pattern:** Follows `test_guardrail.py` conventions (AsyncMock, patch, fixture-based)
 
 ### 4.1 Test Structure
@@ -632,7 +632,9 @@ from gateway.core.provenance import Provenance
 | 12 | `test_rule_config_per_tool_override` | `function_call_detector` (terminal enforce=true) | Terminal always checked regardless of trust | `should_check` returns True even with high trust |
 | 13 | `test_streaming_response_tool_calls` | `function_call_detector` | Tool calls extracted from streaming message | `_extract_tool_calls` parses correctly |
 | 14 | `test_guardian_payload_shape` | `function_call_detector` | Correct JSON shape sent to Guardian | Payload has `tool_calls`, `model`, `check_type` |
-| 15 | `test_case_insensitive_score_parsing` | `function_call_detector` | `YES/yes/Yes` all parsed | All variants → ALLOW |
+|| 15 | `test_case_insensitive_score_parsing` | `function_call_detector` | `YES/yes/Yes` all parsed | All variants → ALLOW |
+|| 16 | `test_check_safety_prompt_shape` | `function_call_detector` | Guardian safety prompt contains correct tool-call JSON | Prompt JSON structure matches expected format |
+|| 17 | `test_http_500_blocks_by_default` | `function_call_detector` (default fail_strategy) | HTTP 500 → BLOCK | `result.decision == SafetyDecision.BLOCK` (default is fail-closed) |
 
 ### 4.3 Test Implementation Details
 
