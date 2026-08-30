@@ -53,8 +53,8 @@ curl http://localhost:9020/health
 | Port | Role | Direction | Description |
 | :--- | :--- | :--- | :--- |
 | **`9020`** | **Gateway Proxy** | `Client` → `Gateway` | The "Front Door." Point Claude Code, Codex, or Hermes here. |
-|| **`8000`** | **Central Service** | `Gateway` → `Backend` | Audit ingestion, DB, HITL state, BYOC sync, settings, dashboard UI |
-|| **`8080`** | **Guardian Model** | `Gateway` → `Guardian` | Granite 4.1 safety classification (separate EC2 or localhost) |
+| | **`8000`** | **Central Service** | `Gateway` → `Backend` | Audit ingestion, DB, HITL state, BYOC sync, settings, dashboard UI |
+| | **`8080`** | **Guardian Model** | `Gateway` → `Guardian` | Granite 4.1 safety classification (separate EC2 or localhost) |
 
 The gateway requires two explicit environment variables — **`GUARDIAN_URL`** (safety judge) and **`CENTRAL_SERVICE_URL`** (audit/dashboard/BYOC). They are independent; neither is derived from the other.
 
@@ -153,7 +153,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `scan_rules.yaml` — PII/Secrets detection rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-|- `tests/`: **712** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
+- `tests/`: **712** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
@@ -189,31 +189,31 @@ All **712** tests are **unit tests** — they mock all external dependencies (HT
 
 Test coverage maps directly to the safety pipeline layers:
 
-|||| Layer | Module | Tests | What It Verifies |
-||||---|---|---|---|
-|||| L0 | `shared/schemas.py` | 9 | AuditEvent field validation, literal constraints, model serialization |
-|||| L0 | `gateway/core/provenance.py` | 26 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
-|||| L0 | `gateway/core/provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 38 | Full provenance pipeline: extraction, serialization, trust-level checks, proxy and API server integration |
-|||| L1 | `gateway/core/scanner.py` | 15 | PII/Secrets regex matching, redaction modes, block/warn action rules |
-|| **L2** | `gateway/core/guardrail.py` | 14 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
-|| **L2** | `gateway/core/guardian_client.py` | 8 | Guardian client protocol: build_request, parse_score, load_prompts |
-|| **L3** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides |
-|| **L3** | `gateway/core/byoc.py` | 17 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key, hard_stop vs soft_block enforcement |
-|| **L3** | `gateway/core/byoc_cloud.py` + `gateway/core/byoc_sync.py` | 30 | BYOC cloud sync: dynamic reload, per-key overrides, background sync loop, source attribution |
-|| **L4** | `gateway/core/hitl.py` | 28 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, cloud sync, cleanup loop, prompt_hash + provenance injection |
-|| **L4** | `gateway/core/hitl_cloud.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 45 | HITL cloud sync, approval, recovery, cleanup loop cloud decision checks, prompt_hash + provenance injection |
-|| **L5.1** | `gateway/core/schema_validator.py` | 22 | CaMeL JSON schema validation for tool parameters, hot-reload |
-|| **L5.2** | `gateway/core/agency_controller.py` | 17 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |
-|| **L6** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies |
-|| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement |
-|| — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
-|| — | `gateway/core/audit.py` | 15 | Async queueing, JSONL buffer fallback, buffer replay on reconnect, prompt hashing |
-|| — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
-|||| Cloud | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
-|||| Cloud | `central-service/api_server.py` | 13 | Severity mapping from event_type+component, settings YAML loading, cloud HITL endpoints |
-|||| Cloud | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
-|||| Cloud | `central-service/partition_manager.py` | 18 | Partition lifecycle: archive→MinIO, drop, create future, error handling |
-|||| Cloud | `central-service/dashboard_*` + `test_hitl_endpoints.py` + `test_settings_history.py` + `test_settings_audit_extended.py` + `test_templates.py` + `test_port_config.py` | 72 | Dashboard HITL/BYOC/audit/gateways/heartbeat/settings endpoints, cloud HITL bridge, settings history, notification templates |
+| Layer | Module | Tests | What It Verifies |
+|---|---|---|---|
+| L0 | `shared/schemas.py` | 9 | AuditEvent field validation, literal constraints, model serialization |
+| L0 | `gateway/core/provenance.py` | 26 | Provenance dataclass (from_headers, from_dict, default, to_dict, is_low_trust, is_known), proxy integration, api_server storage |
+| L0 | `gateway/core/provenance.py` + `test_proxy_provenance.py` + `test_api_server_provenance.py` | 38 | Full provenance pipeline: extraction, serialization, trust-level checks, proxy and API server integration |
+| L1 | `gateway/core/scanner.py` | 15 | PII/Secrets regex matching, redaction modes, block/warn action rules |
+| **L2** | `gateway/core/guardrail.py` | 14 | Guardian scoring, 4 fail-strategies (block/allow/warn/fallback), payload shape |
+| **L2** | `gateway/core/guardian_client.py` | 8 | Guardian client protocol: build_request, parse_score, load_prompts |
+| **L3** | `gateway/core/function_call_detector.py` | 17 | Function-call hallucination detection: block/allow/skip, fail-safes, payload shape, per-tool overrides |
+| **L3** | `gateway/core/byoc.py` | 17 | Pattern-based rules (exfiltration, prompt injection), rate limiting per API key, hard_stop vs soft_block enforcement |
+| **L3** | `gateway/core/byoc_cloud.py` + `gateway/core/byoc_sync.py` | 30 | BYOC cloud sync: dynamic reload, per-key overrides, background sync loop, source attribution |
+| **L4** | `gateway/core/hitl.py` | 28 | Pause on irreversible actions, approve/deny/expiry flow, full request replay, cloud sync, cleanup loop, prompt_hash + provenance injection |
+| **L4** | `gateway/core/hitl_cloud.py` + `test_hitl_cloud.py` + `test_proxy_hitl_cloud.py` | 45 | HITL cloud sync, approval, recovery, cleanup loop cloud decision checks, prompt_hash + provenance injection |
+| **L5.1** | `gateway/core/schema_validator.py` | 22 | CaMeL JSON schema validation for tool parameters, hot-reload |
+| **L5.2** | `gateway/core/agency_controller.py` | 17 | Delegation depth limits, chain integrity, MCP vetting, approval requirements |
+| **L6** | `gateway/core/thinking_mode.py` | 23 | Thinking-mode config, should_run decision matrix, Guardian integration, fail strategies |
+| **L6B** | `gateway/core/output_control.py` | 25 | Output schema validation, HTML escaping, shell/DB quoting, BYOC rules enforcement |
+| — | `gateway/core/block.py` | 5 | Standardized 403 error responses across all block sources |
+| — | `gateway/core/audit.py` | 15 | Async queueing, JSONL buffer fallback, buffer replay on reconnect, prompt hashing |
+| — | `gateway/core/proxy.py` | 18 | End-to-end pipeline: safe pass, guardian block, byoc block, HITL pause, streaming |
+| **Cloud** | `central-service/alert_engine.py` | 17 | Multi-channel dispatch, severity→emoji mapping, credential validation |
+| **Cloud** | `central-service/api_server.py` | 13 | Severity mapping from event_type+component, settings YAML loading, cloud HITL endpoints |
+| **Cloud** | `central-service/audit_db.py` | 12 | DEFAULT_SETTINGS, connection pool init, schema field alignment |
+| **Cloud** | `central-service/partition_manager.py` | 18 | Partition lifecycle: archive→MinIO, drop, create future, error handling |
+| **Cloud** | `central-service/dashboard_*` + `test_hitl_endpoints.py` + `test_settings_history.py` + `test_settings_audit_extended.py` + `test_templates.py` + `test_port_config.py` | 72 | Dashboard HITL/BYOC/audit/gateways/heartbeat/settings endpoints, cloud HITL bridge, settings history, notification templates |
 
 ### Migration from standalone scripts
 
