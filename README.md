@@ -1,6 +1,6 @@
 # aw-aiguard: LLM Security Gateway
 
-[![PyPI - Version](https://img.shields.io/badge/version-0.3.0-blue)](https://pypi.org/project/aw-aiguard/)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/aw-aiguard/aw-aiguard/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Ruff](https://img.shields.io/badge/lint-ruff-000000.svg)](https://github.com/astral-sh/ruff)
