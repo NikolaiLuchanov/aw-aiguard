@@ -11,6 +11,13 @@ class PIIScanner:
     High-performance PII and Secret scanning engine.
     Uses regex-based pattern matching with action-based rules.
     """
+    # Mapping from settings.yaml secrets_block_mode → block_mode
+    _BLOCK_MODE_MAP = {
+        "hard_block": "block",
+        "soft_block": "warn",
+        "disabled": "ignore",
+    }
+
     def __init__(self, rules_path: str, redaction_mode: str = "token", block_mode: str = "block"):
         self.redaction_mode = redaction_mode
         self.block_mode = block_mode.lower()  # "block" = enforce block actions; "warn" = down-grade block to warn
@@ -48,6 +55,8 @@ class PIIScanner:
                 if self.block_mode == 'block':
                     logger.warning(f"CRITICAL: {rule['name']} detected. Blocking request.")
                     return text, SafetyDecision.BLOCK
+                elif self.block_mode == 'ignore':
+                    continue  # skip block rules entirely
                 else:
                     logger.warning(f"SECURITY WARN (block downgraded): {rule['name']} detected in prompt (SCAN_ACTION_MODE=warn).")
                     if overall_decision == SafetyDecision.ALLOW:

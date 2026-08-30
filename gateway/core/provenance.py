@@ -7,6 +7,8 @@ source_id, source_type, trust_level, ingested_at.
 Phase 2.5 deliverable — Layer 0 of the safety pipeline.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Optional

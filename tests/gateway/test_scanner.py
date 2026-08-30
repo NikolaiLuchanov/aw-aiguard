@@ -12,7 +12,7 @@ class TestPIIScanner:
 
     def test_load_real_rules(self, scan_rules_path):
         scanner = PIIScanner(rules_path=scan_rules_path)
-        assert len(scanner.rules) == 3
+        assert len(scanner.rules) == 8
 
     def test_load_missing_file_returns_empty(self, tmp_path):
         scanner = PIIScanner(rules_path=str(tmp_path / "nonexistent.yaml"))
@@ -146,3 +146,42 @@ class TestPIIScanner:
         result, _ = scanner.scan_text("here is SHORT done")
         assert "*****" in result
         assert "SHORT" not in result
+
+    # --- Settings wiring (Finding #7) ---
+
+    def test_block_mode_map_hard_block(self):
+        """_BLOCK_MODE_MAP: hard_block → block."""
+        assert PIIScanner._BLOCK_MODE_MAP["hard_block"] == "block"
+
+    def test_block_mode_map_soft_block(self):
+        """_BLOCK_MODE_MAP: soft_block → warn."""
+        assert PIIScanner._BLOCK_MODE_MAP["soft_block"] == "warn"
+
+    def test_block_mode_map_disabled(self):
+        """_BLOCK_MODE_MAP: disabled → ignore."""
+        assert PIIScanner._BLOCK_MODE_MAP["disabled"] == "ignore"
+
+    def test_scanner_hard_block_mode(self, scan_rules_path):
+        """PIIScanner with hard_block mode enforces blocks."""
+        scanner = PIIScanner(rules_path=scan_rules_path, block_mode="block")
+        text = "my key is AKIAIOSFODNN7EXAMP01"
+        _, decision = scanner.scan_text(text)
+        assert decision == SafetyDecision.BLOCK
+
+    def test_scanner_soft_block_mode(self, scan_rules_path):
+        """PIIScanner with soft_block (warn) downgrades block rules."""
+        scanner = PIIScanner(rules_path=scan_rules_path, block_mode="warn")
+        text = "my key is AKIAIOSFODNN7EXAMP01"
+        _, decision = scanner.scan_text(text)
+        assert decision == SafetyDecision.WARNING
+
+    def test_scanner_disabled_mode(self, temp_scan_rules):
+        """PIIScanner with ignore mode skips block actions."""
+        rules = [
+            {"name": "aws_key", "pattern": "AKIA[A-Z0-9]{16}", "action": "block"},
+        ]
+        scanner = PIIScanner(rules_path=temp_scan_rules(rules), block_mode="ignore")
+        text = "my key is AKIAIOSFODNN7EXAMPLE"
+        result, decision = scanner.scan_text(text)
+        assert "AKIAIOSFODNN7EXAMPLE" in result  # not redacted
+        assert decision == SafetyDecision.ALLOW  # not blocked

@@ -116,8 +116,8 @@ The gateway proxy is configured via `.env` in the project root. All variables:
 
 The gateway loads its configuration from YAML files in `guardrail-config/`:
 
-- **`settings.yaml`** — Global settings (Guardian threshold, safety mode, alert channels)
-- **`scan_rules.yaml`** — PII/Secrets detection patterns
+- **`settings.yaml`** — Global settings (Guardian threshold, safety mode, secrets block mode, alert channels, audit TTL) — actively enforced by Gateway (`GuardianGuard`, `PIIScanner`) and Central Service (`PartitionManager`)
+- **`scan_rules.yaml`** — PII/Secrets detection patterns (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
 - **`hitl_rules.yaml`** — Irreversible action patterns for HITL
 - **`byoc_rules.yaml`** — BYOC stop-limit rules
 - **`function_call_rules.yaml`** — Function-call hallucination detection config
@@ -130,6 +130,47 @@ The gateway loads its configuration from YAML files in `guardrail-config/`:
 - **`agency_rules.yaml`** — Sub-agent delegation depth and MCP vetting config
 
 All YAML files support **hot-reload**: changes take effect without restarting the proxy.
+
+### 3.2.1 `settings.yaml` Enforcement
+
+The `settings.yaml` file is actively loaded at gateway startup and central-service initialization. Each setting is wired into its respective component with the following priority chain:
+
+1. **Constructor parameter** (explicit override)
+2. **Environment variable** (e.g., `GUARDIAN_THRESHOLD`, `LLM_SAFETY_MODE`)
+3. **YAML file value** (from `guardrail-config/settings.yaml`)
+4. **Embedded default** (fallback)
+
+| Setting | YAML Key | Enforced By | Env Var Override | Default |
+|---|---|---|---|---|
+| Guardian threshold | `guardian_threshold` | `GuardianGuard.check_safety()` | `GUARDIAN_THRESHOLD` | `0.85` |
+| LLM safety mode | `llm_safety_mode` | `GuardianGuard._resolve_fail_strategy()` | `LLM_SAFETY_MODE` | `hard_block` |
+| Secrets block mode | `secrets_block_mode` | `PIIScanner.block_mode` | N/A | `hard_block` |
+| Alert channels | `alert_channels` | `AlertEngine` (central-service) | N/A | `[telegram]` |
+| Audit TTL days | `audit_ttl_days` | `PartitionManager.retention_days` | `AUDIT_TTL_DAYS` | `30` |
+
+**Mode mappings:**
+
+- `secrets_block_mode` → `PIIScanner.block_mode`:
+  - `hard_block` → `block` (enforce 403 on block rules)
+  - `soft_block` → `warn` (downgrade block to warning)
+  - `disabled` → `ignore` (skip block actions)
+
+- `llm_safety_mode` → `GuardianGuard.fail_strategy`:
+  - `hard_block` → `block` (fail-closed)
+  - `warn_only` → `warn` (audit mode)
+  - `hybrid` → `allow` (fail-open)
+
+Example `settings.yaml`:
+
+```yaml
+guardian_threshold: 0.85
+llm_safety_mode: hard_block
+secrets_block_mode: hard_block
+alert_channels:
+  - telegram
+  - slack
+audit_ttl_days: 30
+```
 
 ### 3.3 Pointing Your LLM Client at the Proxy
 
@@ -268,7 +309,7 @@ When the Guardian service is unreachable, the proxy applies the configured fail 
 | `block` | Blocks all requests if safety cannot be verified | 🔴 High | Production |
 | `allow` | Forwards without safety check | 🟢 Low | Local dev |
 | `warn` | Forwards + adds `X-Guard-Status: unverified` header | 🟡 Medium | Staging |
-| `fallback` | Uses local emergency filter | 🔵 High | Enterprise |
+| `fallback` | Runs PII scanner (credit cards, private keys, AWS keys, etc.) on the prompt; blocks if a match found. Force-full-block with `EMERGENCY_FILTER_BLOCK_ALL=true`. | 🔵 High | Enterprise |
 
 ---
 

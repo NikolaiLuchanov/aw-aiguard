@@ -150,7 +150,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `byoc_rules.yaml` — Structured BYOC stop-limits (patterns, enforcement, severity)
   - `function_call_rules.yaml` — Function-call hallucination detection rules (Phase 4.1)
   - `hitl_rules.yaml` — Irreversible action patterns with per-rule timeouts
-  - `scan_rules.yaml` — PII/Secrets detection rules (block, redact, warn, ignore)
+  - `scan_rules.yaml` — PII/Secrets detection rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
 |- `tests/`: **712** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.

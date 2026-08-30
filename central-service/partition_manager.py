@@ -49,13 +49,33 @@ class PartitionManager:
       + create_future_partitions()
     """
 
+    @staticmethod
+    def _load_settings() -> Dict:
+        """Load settings.yaml from guardrail-config (Finding #7 — audit_ttl_days YAML fallback)."""
+        config_paths = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "guardrail-config", "settings.yaml"),
+            "/app/guardrail-config/settings.yaml",  # Docker mount
+        ]
+        for path in config_paths:
+            path = os.path.normpath(path)
+            if os.path.exists(path):
+                import yaml as _yaml
+                try:
+                    with open(path) as f:
+                        data = _yaml.safe_load(f)
+                        if data:
+                            return data
+                except Exception:
+                    pass
+        return {}
+
     def __init__(
         self,
         database_url: Optional[str] = None,
         minio_endpoint: Optional[str] = None,
         minio_access_key: str = "aiguard",
         minio_secret_key: str = "aiguard_local_dev",
-        retention_days: int = 30,
+        retention_days: Optional[int] = None,
         minio_bucket: str = "audit-archive",
         minio_secure: bool = False,
     ):
@@ -66,6 +86,10 @@ class PartitionManager:
         self.minio_endpoint = minio_endpoint or os.getenv("MINIO_ENDPOINT", "localhost:9000")
         self.minio_access_key = minio_access_key
         self.minio_secret_key = minio_secret_key
+        # Settings-driven retention_days (wired from settings.yaml — Finding #7).
+        # Priority: explicit param > env var > YAML > embedded default (30).
+        if retention_days is None:
+            retention_days = int(os.getenv("AUDIT_TTL_DAYS", "30"))
         self.retention_days = retention_days
         self.minio_bucket = minio_bucket
         self.minio_secure = minio_secure

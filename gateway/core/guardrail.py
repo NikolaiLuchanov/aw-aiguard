@@ -3,7 +3,7 @@ import logging
 import httpx
 import os
 import asyncio
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from gateway.core.guardian_client import parse_score
 
@@ -28,14 +28,24 @@ class GuardianGuard:
         self,
         url: str,
         model: str,
-        fail_strategy: str,
+        fail_strategy: Optional[str],
         api_key: str = "",
         prompts_path: Optional[str] = None,
+        guardian_threshold: Optional[float] = None,
+        llm_safety_mode: Optional[str] = None,
+        scanner: Optional[Any] = None,
     ):
         self.url = url
         self.model = model
-        self.fail_strategy = fail_strategy.lower()
+        self.fail_strategy = fail_strategy.lower() if fail_strategy else ""
         self.api_key = api_key
+        # Settings-driven configuration (wired from settings.yaml — Finding #7).
+        # If not explicitly passed, falls back to env vars then to embedded defaults.
+        self.guardian_threshold = guardian_threshold if guardian_threshold is not None else float(
+            os.getenv("GUARDIAN_THRESHOLD", "0.85")
+        )
+        self.llm_safety_mode = (llm_safety_mode or
+                                os.getenv("LLM_SAFETY_MODE", "hard_block")).lower()
         # Timeout defaults are env-tunable for remote EC2 deployment.
         # Raise GUARDIAN_TIMEOUT for cross-internet latency (default: 2.0s).
         # Raise GUARDIAN_THINKING_TIMEOUT for thinking mode (default: 30.0s).
@@ -46,6 +56,7 @@ class GuardianGuard:
             float(os.getenv("GUARDIAN_THINKING_TIMEOUT", "30.0"))
         )
         self._prompts = self._load_prompts(prompts_path)
+        self.scanner = scanner
 
     def _load_prompts(self, path: Optional[str]) -> Dict:
         """Load guardian prompt templates from YAML, falling back to bundled defaults."""
@@ -70,6 +81,42 @@ class GuardianGuard:
                 "user": "The AI assistant proposed the following tool calls. Are these tool calls\nlegitimate and consistent with the user's request, or are they fabricated\nor suspicious? Answer \"yes\" if legitimate, \"no\" if hallucinated or suspicious.\nTool calls:\n{tool_calls_json}",
             },
         }
+
+    def _resolve_fail_strategy(self) -> str:
+        """Resolve fail_strategy from llm_safety_mode if not explicitly set.
+
+        Mapping (settings.yaml → fail_strategy):
+          hard_block → block
+          warn_only  → warn
+          hybrid     → allow
+
+        If fail_strategy was explicitly set in the constructor, it wins.
+        When fail_strategy is a settings value (hard_block/warn_only/hybrid),
+        map it directly to the corresponding fail_strategy.
+        When fail_strategy is empty (None passed), fall back to llm_safety_mode.
+        """
+        if self.fail_strategy not in ("hard_block", "warn_only", "hybrid", ""):
+            # Already a proper fail_strategy value
+            return self.fail_strategy
+
+        mode_map = {
+            "hard_block": "block",
+            "warn_only": "warn",
+            "hybrid": "allow",
+        }
+
+        # If fail_strategy is a settings value, map it directly
+        if self.fail_strategy in mode_map:
+            resolved = mode_map[self.fail_strategy]
+        # If fail_strategy is empty, try llm_safety_mode first
+        elif self.llm_safety_mode in mode_map:
+            resolved = mode_map[self.llm_safety_mode]
+        else:
+            resolved = "block"
+
+        logger.info("Resolved fail_strategy=%s, llm_safety_mode=%s → %s",
+                     self.fail_strategy, self.llm_safety_mode, resolved)
+        return resolved
 
     async def check_safety(self, prompt: str, think: bool = False) -> SafetyDecision:
         """
@@ -107,17 +154,17 @@ class GuardianGuard:
                         "Guardian returned unparseable score (content=%r) — applying fail strategy.",
                         content[:200],
                     )
-                    return await self._handle_failure()
+                    return await self._handle_failure(prompt)
 
                 logger.error("Guardian API returned unexpected status: %d", response.status_code)
-                return await self._handle_failure()
+                return await self._handle_failure(prompt)
 
         except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Guardian safety check failed: %s", str(e))
-            return await self._handle_failure()
+            return await self._handle_failure(prompt)
         except Exception as e:
             logger.exception("Unexpected error in GuardianGuard: %s", str(e))
-            return await self._handle_failure()
+            return await self._handle_failure(prompt)
 
     def _build_request(self, prompt: str, think: bool) -> Dict:
         """Build an OpenAI chat-completions request for the guardian."""
@@ -130,35 +177,59 @@ class GuardianGuard:
             api_key=self.api_key,
         )
 
-    async def _handle_failure(self) -> SafetyDecision:
+    async def _handle_failure(self, prompt: Optional[str] = None) -> SafetyDecision:
         """
         Implements the 4-way switch for GUARDIAN_FAIL_STRATEGY.
+
+        Uses _resolve_fail_strategy() to apply settings.yaml-driven
+        llm_safety_mode when fail_strategy was set from settings rather than env.
         """
-        if self.fail_strategy == "block":
+        strategy = self._resolve_fail_strategy()
+
+        if strategy == "block":
             logger.critical("Guardian FAIL-CLOSED: Blocking request due to system failure.")
             return SafetyDecision.BLOCK
-        
-        elif self.fail_strategy == "allow":
+
+        elif strategy == "allow":
             logger.warning("Guardian FAIL-OPEN: Allowing request despite system failure.")
             return SafetyDecision.ALLOW
-        
-        elif self.fail_strategy == "warn":
+
+        elif strategy == "warn":
             logger.warning("Guardian AUDIT-MODE: Allowing request and tagging as unverified.")
             return SafetyDecision.WARNING
-        
-        elif self.fail_strategy == "fallback":
-            return await self._emergency_filter()
-        
+
+        elif strategy == "fallback":
+            return await self._emergency_filter(prompt)
+
         # Default to safest option
         return SafetyDecision.BLOCK
 
-    async def _emergency_filter(self) -> SafetyDecision:
+    async def _emergency_filter(self, prompt: Optional[str] = None) -> SafetyDecision:
         """
-        Local emergency filter used when cloud backend is unreachable (Fallback strategy).
-        Placeholder implementation for Phase 1.3.
+        Local emergency filter used when cloud Guardian is unreachable (Fallback strategy).
+
+        Uses the PII scanner as a lightweight local safety net — blocks requests
+        that contain detected PII/secrets (credit cards, keys, private keys, etc.),
+        otherwise allows. Local dev can opt into blocking all via
+        ``EMERGENCY_FILTER_BLOCK_ALL=true`` env var.
         """
-        # FUTURE: Implement regex/keyword checks here.
-        # For now, we return ALLOW to avoid blocking users in dev, 
-        # but in a real prod scenario, this might be a strict BLOCK.
-        logger.info("Executing local emergency filter (fallback)...")
+        block_all = os.getenv("EMERGENCY_FILTER_BLOCK_ALL", "false").lower() == "true"
+
+        if block_all:
+            logger.warning(
+                "Guardian unreachable — EMERGENCY_FILTER_BLOCK_ALL=true — blocking request."
+            )
+            return SafetyDecision.BLOCK
+
+        if self.scanner and prompt:
+            logger.info(
+                "Guardian unreachable — running PII scanner as local emergency filter..."
+            )
+            _, decision = self.scanner.scan_text(prompt)
+            if decision == SafetyDecision.BLOCK:
+                return SafetyDecision.BLOCK
+
+        logger.info(
+            "Guardian unreachable — PII scanner as local emergency filter — ALLOW."
+        )
         return SafetyDecision.ALLOW

@@ -62,7 +62,7 @@ python tools/threat_probe.py "test" --quiet
 |---|---|---|
 | `GUARDIAN_URL` | `http://localhost:8080/v1/chat/completions` | Guardian API endpoint for L2 scoring |
 | `BYOC_RULES_PATH` | `./guardrail-config/byoc_rules.yaml` | Path to BYOC rules |
-| `SCAN_RULES_PATH` | `./guardrail-config/scan_rules.yaml` | Path to PII/secret scan rules |
+| `SCAN_RULES_PATH` | `./guardrail-config/scan_rules.yaml` | Path to PII/secret scan rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys) |
 
 ### Layer Reference
 

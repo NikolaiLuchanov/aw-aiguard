@@ -172,7 +172,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="aw-aiguard Central Service",
     description="Audit log receiver, settings sync, and alert dispatch.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 

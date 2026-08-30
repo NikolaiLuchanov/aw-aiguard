@@ -270,3 +270,88 @@ class TestHitlCloudSync:
         """Test 12: cloud_url=None → skip recovery silently."""
         await hitl_gate_no_cloud._recover_pending_from_cloud()
         assert len(hitl_gate_no_cloud.pending_requests) == 0
+
+    # --- cleanup loop ordering (Finding #9 fix) ---
+
+    @pytest.mark.asyncio
+    async def test_cleanup_check_cloud_before_expiry(self, hitl_gate, hitl_rules_path):
+        """Test 13: Cloud check runs BEFORE expiration — approval honored even past timeout."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"decision": "approved"}
+
+        with patch('gateway.core.hitl.httpx.AsyncClient') as MockClient:
+            instance = _setup_mock_httpx(MockClient, get_response=mock_resp)
+
+            decision, req_id = await hitl_gate.check_hitl("delete_file /important")
+            assert decision == HitlDecision.PAUSE
+            req = hitl_gate.pending_requests[req_id]
+            assert req.status == HitlStatus.PENDING
+
+            # Manually advance timeout so request is past its limit
+            req.created_at = time.time() - req.timeout_seconds - 10
+            assert (time.time() - req.created_at) > req.timeout_seconds
+
+            # Run one cycle of pending request processing
+            await hitl_gate._process_pending_requests()
+
+            # Approval from cloud should have been applied, NOT expired
+            assert req.status == HitlStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_cleanup_expires_when_cloud_no_decision(self, hitl_gate, hitl_rules_path):
+        """Test 14: Cloud returns None → request expires after timeout."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"decision": None}
+
+        with patch('gateway.core.hitl.httpx.AsyncClient') as MockClient:
+            instance = _setup_mock_httpx(MockClient, get_response=mock_resp)
+
+            decision, req_id = await hitl_gate.check_hitl("delete_file /important")
+            assert decision == HitlDecision.PAUSE
+            req = hitl_gate.pending_requests[req_id]
+
+            # Manually advance timeout so request is past its limit
+            req.created_at = time.time() - req.timeout_seconds - 10
+
+            # Run one cycle of pending request processing
+            await hitl_gate._process_pending_requests()
+
+            # No cloud decision → expired
+            assert req.status == HitlStatus.EXPIRED
+
+    @pytest.mark.asyncio
+    async def test_cleanup_cloud_denied(self, hitl_gate, hitl_rules_path):
+        """Test 15: Cloud returns denied → request denied, not expired."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"decision": "denied"}
+
+        with patch('gateway.core.hitl.httpx.AsyncClient') as MockClient:
+            instance = _setup_mock_httpx(MockClient, get_response=mock_resp)
+
+            decision, req_id = await hitl_gate.check_hitl("delete_file /important")
+            assert decision == HitlDecision.PAUSE
+            req = hitl_gate.pending_requests[req_id]
+
+            # Manually advance timeout so request is past its limit
+            req.created_at = time.time() - req.timeout_seconds - 10
+
+            # Run one cycle of pending request processing
+            await hitl_gate._process_pending_requests()
+
+            assert req.status == HitlStatus.DENIED
+
+    @pytest.mark.asyncio
+    async def test_cleanup_does_not_expire_approved_request(self, hitl_gate, hitl_rules_path):
+        """Test 16: Already approved request is never expired by cleanup."""
+        decision, req_id = await hitl_gate.check_hitl("delete_file /important")
+        req = hitl_gate.pending_requests[req_id]
+        req.status = HitlStatus.APPROVED
+        req.created_at = time.time() - req.timeout_seconds - 100
+
+        # Run one cycle of pending request processing
+        await hitl_gate._process_pending_requests()
+
+        assert req.status == HitlStatus.APPROVED

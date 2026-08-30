@@ -37,7 +37,7 @@ aw-aiguard/
 │   ├── docker-compose.yml            # Local stack: PostgreSQL, MinIO, API server
 │   └── README.md                     # Central service documentation
 ├── guardrail-config/                 # YAML-based safety rules and system thresholds
-│   ├── scan_rules.yaml               # PII/Secrets detection rules
+│   ├── scan_rules.yaml               # PII/Secrets detection rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
 │   ├── settings.yaml                 # Guardian thresholds, safety mode, alert channels
 │   ├── hitl_rules.yaml               # Irreversible action patterns with per-rule timeouts
 │   ├── byoc_rules.yaml               # BYOC stop-limits

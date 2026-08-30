@@ -6,10 +6,10 @@ YAML-based configuration files for all safety layers. Each file is hot-reloadabl
 
 | File | Purpose | Component |
 |---|---|---|
-| `scan_rules.yaml` | PII/Secrets detection rules (regex patterns, actions, redaction modes) | `PIIScanner` |
+| `scan_rules.yaml` | PII/Secrets detection rules (regex patterns, actions, redaction modes) — PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys | `PIIScanner` |
 | `hitl_rules.yaml` | Irreversible action patterns with per-rule timeouts | `HITLGate` |
 | `byoc_rules.yaml` | BYOC stop-limits (patterns, enforcement levels, severity) | `BYOCEngine` |
-| `settings.yaml` | Guardian thresholds, safety mode, alert channels, scan sequence | Central Service |
+| `settings.yaml` | Guardian threshold, safety mode, secrets block mode, alert channels, audit TTL — actively enforced by gateway and central-service components | Gateway (`GuardianGuard`, `PIIScanner`) + Central Service (`PartitionManager`) |
 | `function_call_rules.yaml` | Function-call hallucination detection (trust threshold, fail strategy, tool overrides) | `FunctionCallDetector` |
 | `tool_schemas.yaml` | CaMeL JSON schemas for tool parameters (Draft 7 validation) | `SchemaValidator` |
 | `camel_rules.yaml` | CaMeL enforcement rules (all hard_stop) | `SchemaValidator` |

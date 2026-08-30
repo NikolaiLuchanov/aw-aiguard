@@ -36,7 +36,7 @@ aw-aiguard/                          # Project root
 │   └── README.md                     # Central service documentation
 ├── guardrail-config/                 # YAML-based safety rules and system thresholds
 │   ├── README.md
-│   ├── scan_rules.yaml               # PII/Secrets detection rules (block, redact, warn, ignore)
+│   ├── scan_rules.yaml               # PII/Secrets detection rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
 │   ├── settings.yaml                 # Guardian thresholds, safety mode, alert channels
 │   ├── hitl_rules.yaml               # Irreversible action patterns with per-rule timeouts
 │   ├── thinking_mode_rules.yaml       # Thinking-mode verification config (thresholds, actions, fail strategy)

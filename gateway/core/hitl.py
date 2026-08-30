@@ -236,18 +236,27 @@ class HITLGate:
     async def _cleanup_loop(self):
         while True:
             await asyncio.sleep(30)
-            for request_id, req in list(self.pending_requests.items()):
-                if req.status == HitlStatus.PENDING and (time.time() - req.created_at) > req.timeout_seconds:
-                    req.status = HitlStatus.EXPIRED
-                    logger.warning(f"HITL Auto-expired: {request_id}")
+            await self._process_pending_requests()
 
-                # Phase 3.3: Cloud sync — check if decision was made via dashboard
-                if req.status == HitlStatus.PENDING and self.cloud_url:
-                    decision = await self._get_cloud_decision(request_id)
-                    if decision == "approved":
-                        req.status = HitlStatus.APPROVED
-                    elif decision == "denied":
-                        req.status = HitlStatus.DENIED
+    async def _process_pending_requests(self):
+        """Check cloud decisions and expire stale pending requests.
+
+        Called once per tick by _cleanup_loop, and directly by tests.
+        """
+        for request_id, req in list(self.pending_requests.items()):
+            # Phase 3.3: Cloud sync — check BEFORE expiring so last-minute
+            # approvals from the dashboard are honored.
+            if req.status == HitlStatus.PENDING and self.cloud_url:
+                decision = await self._get_cloud_decision(request_id)
+                if decision == "approved":
+                    req.status = HitlStatus.APPROVED
+                elif decision == "denied":
+                    req.status = HitlStatus.DENIED
+
+            # Expire only still-pending requests
+            if req.status == HitlStatus.PENDING and (time.time() - req.created_at) > req.timeout_seconds:
+                req.status = HitlStatus.EXPIRED
+                logger.warning(f"HITL Auto-expired: {request_id}")
 
     # ------------------------------------------------------------------ #
     # Phase 3.3 — Cloud persistence helpers

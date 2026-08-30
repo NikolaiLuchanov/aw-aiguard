@@ -36,6 +36,7 @@ PROXY_PORT = int(os.getenv("PROXY_PORT", 9020))
 GUARDIAN_URL = os.getenv("GUARDIAN_URL")
 GUARDIAN_MODEL = os.getenv("GUARDIAN_MODEL", "granite4.1-guardian")
 GUARDIAN_FAIL_STRATEGY = os.getenv("GUARDIAN_FAIL_STRATEGY", "block")
+GUARDIAN_PROMPTS_PATH = os.getenv("GUARDIAN_PROMPTS_PATH", None)
 
 # PII Scanner Configuration
 SCAN_SEQUENCE = os.getenv("SCAN_SEQUENCE", "B")
@@ -64,6 +65,40 @@ if not CENTRAL_SERVICE_URL:
     print("Error: CENTRAL_SERVICE_URL must be set in gateway/.env (central-service base URL)")
     exit(1)
 
+
+def _load_gateway_settings() -> Dict:
+    """Load settings.yaml from guardrail-config (Finding #7).
+
+    Returns a dict with keys: guardian_threshold, llm_safety_mode,
+    secrets_block_mode, alert_channels, audit_ttl_days.
+    Falls back to embedded defaults if file is missing.
+    """
+    config_paths = [
+        os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "settings.yaml"),
+        "/app/guardrail-config/settings.yaml",  # Docker mount
+    ]
+    for path in config_paths:
+        path = os.path.normpath(path)
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    data = yaml.safe_load(f)
+                    if data:
+                        logger.info("Loaded settings.yaml from %s", path)
+                        return data
+            except Exception as e:
+                logger.warning("Failed to load settings.yaml from %s: %s", path, e)
+    return {
+        "guardian_threshold": 0.85,
+        "llm_safety_mode": "hard_block",
+        "secrets_block_mode": "hard_block",
+        "alert_channels": ["telegram"],
+        "audit_ttl_days": 30,
+    }
+
+
+SETTINGS = _load_gateway_settings()  # Global settings dict (Finding #7)
+
 # BYOC Cloud Sync (Phase 3.2) - deprecated override; must be explicitly set.
 # Defaults to CENTRAL_SERVICE_URL only if set via env, not as a silent fallback.
 BYOC_CLOUD_URL = os.getenv("BYOC_CLOUD_URL", "").rstrip("/") or CENTRAL_SERVICE_URL
@@ -89,18 +124,25 @@ if not GUARDIAN_URL:
     print("Error: GUARDIAN_URL must be set in gateway/.env (safety judge endpoint, e.g. http://localhost:8080/v1/chat/completions)")
     exit(1)
 
-# Initialize the Guardian Guard
-guardian = GuardianGuard(
-    url=GUARDIAN_URL,
-    model=GUARDIAN_MODEL,
-    fail_strategy=GUARDIAN_FAIL_STRATEGY
-)
-
-# Initialize the PII Scanner
+# Initialize the PII Scanner (wired with settings.yaml — Finding #7)
+_secrets_mode = SETTINGS.get("secrets_block_mode", "hard_block")
+_scanner_block_mode = PIIScanner._BLOCK_MODE_MAP.get(_secrets_mode, "block")
 scanner = PIIScanner(
     rules_path=SCAN_RULES_PATH,
     redaction_mode=SCAN_REDACTION_MODE,
-    block_mode=SCAN_ACTION_MODE  # "block" = 403 on block rules; "warn" = log only
+    block_mode=_scanner_block_mode,  # Mapped from secrets_block_mode
+)
+
+# Initialize the Guardian Guard (wired with settings.yaml — Finding #7)
+# Finding #4: scanner passed as local emergency filter for fallback strategy
+guardian = GuardianGuard(
+    url=GUARDIAN_URL,
+    model=GUARDIAN_MODEL,
+    fail_strategy=GUARDIAN_FAIL_STRATEGY,
+    prompts_path=GUARDIAN_PROMPTS_PATH,
+    guardian_threshold=SETTINGS.get("guardian_threshold"),
+    llm_safety_mode=SETTINGS.get("llm_safety_mode"),
+    scanner=scanner,
 )
 
 # Initialize the HITL Gate

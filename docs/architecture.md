@@ -131,7 +131,7 @@ Every request is sent to the Guardian model for safety classification before rea
 | `block` | Fail-closed: blocks all requests | Production |
 | `allow` | Fail-open: forwards without check | Local dev |
 | `warn` | Forwards + adds `X-Guard-Status: unverified` | Staging |
-| `fallback` | Uses local emergency filter | Enterprise |
+| `fallback` | Runs PII scanner on the prompt; blocks if PII/secrets match found | Enterprise |
 
 **Two modes:**
 | Mode | Parameter | Latency | Use |
@@ -582,7 +582,7 @@ mcp_server_vetting:
 
 | File | Purpose | Component |
 |---|---|---|
-| `scan_rules.yaml` | PII/Secrets detection patterns | `PIIScanner` |
+| `scan_rules.yaml` | PII/Secrets detection patterns (PCI DSS credit cards, GDPR IP/passport/phone, AWS keys, private keys) | `PIIScanner` |
 | `hitl_rules.yaml` | Irreversible action patterns + timeouts | `HITLGate` |
 | `byoc_rules.yaml` | BYOC stop-limit rules | `BYOCEngine` |
 | `settings.yaml` | Global settings (thresholds, safety mode, alert channels) | Central Service |

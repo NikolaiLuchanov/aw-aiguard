@@ -83,7 +83,7 @@ When the Cloud Guardian service is unreachable (network timeout, server down), t
 | `block` | **Fail-Closed**. Blocks all requests if safety cannot be verified. | 🔴 High | Production / High-Security |
 | `allow` | **Fail-Open**. Forwards request without safety check. | 🟢 Low | Local Dev / Prototyping |
 | `warn` | **Audit Mode**. Forwards request but adds `X-Guard-Status: unverified` header. | 🟡 Medium | Staging / Monitoring |
-| `fallback`| **Defense-in-Depth**. Uses a local emergency filter (placeholder). | 🔵 High | Enterprise Resilience |
+|| `fallback`| **Defense-in-Depth**. Runs the PII scanner on the prompt text (credit cards, private keys, AWS keys, etc.) and blocks if a match is found. Local dev can force a full block with `EMERGENCY_FILTER_BLOCK_ALL=true` env var. | 🔵 High | Enterprise Resilience |
 
 ### HITL "Pause" Middleware (Phase 1.5)
 The HITL middleware intercepts requests identified as "irreversible" or "high-risk" and pauses execution until a human operator approves or denies them.
