@@ -48,3 +48,6 @@ tmp/
 *.db
 *.sqlite*
 audit_logs/
+
+# ── Local session / temp plans ───────────────────
+.hermes/
