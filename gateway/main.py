@@ -1,25 +1,30 @@
-import os
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
+import os
+import sys
+from contextlib import asynccontextmanager, suppress
+from typing import Any
+
 import yaml
-from typing import Any, Dict
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-from gateway.core.proxy import LLMProxy
-from gateway.core.guardrail import GuardianGuard
-from gateway.core.scanner import PIIScanner
-from gateway.core.hitl import HITLGate
-from gateway.core.byoc import BYOCEngine
-from gateway.core.audit import AuditLogger
-from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
-from gateway.core.schema_validator import SchemaValidator
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
 from gateway.core.agency_controller import AgencyController
-from gateway.core.function_call_detector import FunctionCallDetector   # Phase 4.1
-from gateway.core.sanitizer import IngestionSanitizer                  # Phase 4.2
-from gateway.core.output_control import OutputController               # Phase 4.3
+from gateway.core.audit import AuditLogger
+from gateway.core.byoc import BYOCEngine
+from gateway.core.function_call_detector import FunctionCallDetector  # Phase 4.1
+from gateway.core.guardrail import GuardianGuard
+from gateway.core.hitl import HITLGate
+from gateway.core.output_control import OutputController  # Phase 4.3
+from gateway.core.proxy import LLMProxy
+from gateway.core.sanitizer import IngestionSanitizer  # Phase 4.2
+from gateway.core.scanner import PIIScanner
+from gateway.core.schema_validator import SchemaValidator
+from gateway.core.thinking_mode import ThinkingModeConfig, ThinkingModeVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +34,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 # Configuration from .env
 TARGET_URL = os.getenv("TARGET_API_BASE_URL")
 API_KEY = os.getenv("TARGET_API_KEY")
-PROXY_PORT = int(os.getenv("PROXY_PORT", 9020))
+PROXY_PORT = int(os.getenv("PROXY_PORT", "9020"))
 
 # Guardian Configuration - REQUIRED (finding #4): no default; the safety
 # judge endpoint differs per environment (dev: llama.cpp :8080/v1/chat/completions, prod: EC2 :8080/v1/chat/completions).
@@ -63,10 +68,10 @@ BYOC_RULES_PATH = os.path.join(os.path.dirname(__file__), "..", "guardrail-confi
 CENTRAL_SERVICE_URL = os.getenv("CENTRAL_SERVICE_URL", "").rstrip("/")
 if not CENTRAL_SERVICE_URL:
     print("Error: CENTRAL_SERVICE_URL must be set in gateway/.env (central-service base URL)")
-    exit(1)
+    sys.exit(1)
 
 
-def _load_gateway_settings() -> Dict:
+def _load_gateway_settings() -> dict:
     """Load settings.yaml from guardrail-config (Finding #7).
 
     Returns a dict with keys: guardian_threshold, llm_safety_mode,
@@ -119,10 +124,10 @@ SETTINGS_POLL_INTERVAL = int(os.getenv("SETTINGS_POLL_INTERVAL", "60"))  # secon
 
 if not TARGET_URL or not API_KEY:
     print("Error: TARGET_API_BASE_URL and TARGET_API_KEY must be set in gateway/.env")
-    exit(1)
+    sys.exit(1)
 if not GUARDIAN_URL:
     print("Error: GUARDIAN_URL must be set in gateway/.env (safety judge endpoint, e.g. http://localhost:8080/v1/chat/completions)")
-    exit(1)
+    sys.exit(1)
 
 # Initialize the PII Scanner (wired with settings.yaml — Finding #7)
 _secrets_mode = SETTINGS.get("secrets_block_mode", "hard_block")
@@ -284,22 +289,16 @@ async def lifespan(app: FastAPI):
     # Shutdown
     if byoc_sync_task:
         byoc_sync_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await byoc_sync_task
-        except asyncio.CancelledError:
-            pass
     if heartbeat_task:
         heartbeat_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await heartbeat_task
-        except asyncio.CancelledError:
-            pass
     if settings_poll_task:
         settings_poll_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await settings_poll_task
-        except asyncio.CancelledError:
-            pass
     await audit_logger.stop()
     await hitl.stop_cleanup()
     await proxy_engine.stop()
@@ -327,7 +326,7 @@ async def _byoc_sync_loop():
 def _compute_settings_hash() -> str:
     """Compute a SHA-256 hash of the current local settings state.
     Used to detect when remote settings differ from local."""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "scan_sequence": SCAN_SEQUENCE,
         "scan_redaction_mode": SCAN_REDACTION_MODE,
         "scan_action_mode": SCAN_ACTION_MODE,
@@ -338,9 +337,9 @@ def _compute_settings_hash() -> str:
     return hashlib.sha256(yaml.dump(state, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def _compute_settings_hash_from_dict(settings: Dict) -> str:
+def _compute_settings_hash_from_dict(settings: dict) -> str:
     """Hash a settings dict for diff comparison with local state."""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "scan_sequence": settings.get("scan_sequence", SCAN_SEQUENCE),
         "scan_redaction_mode": settings.get("scan_redaction_mode", SCAN_REDACTION_MODE),
         "scan_action_mode": settings.get("scan_action_mode", SCAN_ACTION_MODE),
@@ -351,7 +350,7 @@ def _compute_settings_hash_from_dict(settings: Dict) -> str:
     return hashlib.sha256(yaml.dump(state, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def _apply_remote_settings(remote_settings: Dict) -> None:
+def _apply_remote_settings(remote_settings: dict) -> None:
     """
     Apply remote settings to local components.
     This updates scanner, hitl, and guardrail configurations in-place.
@@ -360,7 +359,7 @@ def _apply_remote_settings(remote_settings: Dict) -> None:
     global HITL_DEFAULT_TIMEOUT, HITL_NOTIFICATION_MODE
     global GUARDIAN_FAIL_STRATEGY
 
-    applied: Dict[str, tuple] = {}
+    applied: dict[str, tuple] = {}
 
     # Scanner settings
     if "scan_sequence" in remote_settings:

@@ -7,7 +7,7 @@ All tests mock external dependencies (Postgres asyncpg, MinIO) — zero live ser
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -136,7 +136,7 @@ def sample_archivable_partition():
         "name": "audit_logs_y2025m01",
         "year": "2025",
         "month": "01",
-        "max_data_date": datetime.utcnow() - timedelta(days=45),
+        "max_data_date": datetime.now(timezone.utc) - timedelta(days=45),
     }
 
 
@@ -147,7 +147,7 @@ def sample_non_archivable_partition():
         "name": "audit_logs_y2026m07",
         "year": "2026",
         "month": "07",
-        "max_data_date": datetime.utcnow() - timedelta(days=5),
+        "max_data_date": datetime.now(timezone.utc) - timedelta(days=5),
     }
 
 
@@ -194,8 +194,8 @@ async def test_list_archivable_filters_old_partitions(partition_manager):
 
     def fetchval_side_query(sql, name):
         if "2025m01" in name:
-            return datetime.utcnow() - timedelta(days=45)
-        return datetime.utcnow() - timedelta(days=5)
+            return datetime.now(timezone.utc) - timedelta(days=45)
+        return datetime.now(timezone.utc) - timedelta(days=5)
 
     conn.fetchval = AsyncMock(side_effect=fetchval_side_query)
 
@@ -209,6 +209,29 @@ async def test_list_archivable_filters_old_partitions(partition_manager):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_list_archivable_handles_aware_max_date(partition_manager):
+    """max(created_at) from a TIMESTAMPTZ column is timezone-aware; the
+    comparison against the retention cutoff must not raise TypeError."""
+    conn = partition_manager._conn
+
+    conn.fetch = AsyncMock(return_value=[
+        {"name": "audit_logs_y2025m01", "bound_expr": "FROM '2025-01-01' TO '2025-02-01'"},
+    ])
+
+    def fetchval_side_query(sql, name):
+        # asyncpg returns an AWARE datetime for TIMESTAMPTZ columns
+        return datetime.now(timezone.utc) - timedelta(days=45)
+
+    conn.fetchval = AsyncMock(side_effect=fetchval_side_query)
+
+    result = await partition_manager.list_archivable_partitions()  # must not raise
+
+    assert len(result) == 1
+    assert result[0]["name"] == "audit_logs_y2025m01"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_list_archivable_returns_empty_when_all_recent(partition_manager):
     """When no partition is older than retention, result is empty."""
     conn = partition_manager._conn
@@ -216,7 +239,7 @@ async def test_list_archivable_returns_empty_when_all_recent(partition_manager):
     conn.fetch = AsyncMock(return_value=[
         {"name": "audit_logs_y2026m07", "bound_expr": "FROM '2026-07-01' TO '2026-08-01'"},
     ])
-    conn.fetchval = AsyncMock(return_value=datetime.utcnow() - timedelta(days=5))
+    conn.fetchval = AsyncMock(return_value=datetime.now(timezone.utc) - timedelta(days=5))
 
     result = await partition_manager.list_archivable_partitions()
     assert result == []
@@ -469,7 +492,7 @@ async def test_run_full_cycle_handles_archive_error(partition_manager):
     """Errors during archive are captured but don't prevent drop."""
     partition_manager.list_archivable_partitions = AsyncMock(
         return_value=[{"name": "audit_logs_y2025m01", "year": "2025", "month": "01",
-                       "max_data_date": datetime.utcnow() - timedelta(days=45)}]
+                       "max_data_date": datetime.now(timezone.utc) - timedelta(days=45)}]
     )
     partition_manager.archive_partition = MagicMock(side_effect=Exception("MinIO down"))
 

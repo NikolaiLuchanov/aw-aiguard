@@ -1,9 +1,11 @@
-from enum import Enum
+from __future__ import annotations
+
 import logging
-import httpx
 import os
-import asyncio
-from typing import Any, Dict, Optional
+from enum import Enum
+from typing import Any, Optional
+
+import httpx
 
 from gateway.core.guardian_client import parse_score
 
@@ -58,7 +60,7 @@ class GuardianGuard:
         self._prompts = self._load_prompts(prompts_path)
         self.scanner = scanner
 
-    def _load_prompts(self, path: Optional[str]) -> Dict:
+    def _load_prompts(self, path: Optional[str]) -> dict:
         """Load guardian prompt templates from YAML, falling back to bundled defaults."""
         from gateway.core.guardian_client import load_prompts
         if path and os.path.isfile(path):
@@ -162,11 +164,11 @@ class GuardianGuard:
         except (httpx.RequestError, httpx.TimeoutException) as e:
             logger.warning("Guardian safety check failed: %s", str(e))
             return await self._handle_failure(prompt)
-        except Exception as e:
-            logger.exception("Unexpected error in GuardianGuard: %s", str(e))
+        except Exception:
+            logger.exception("Unexpected error in GuardianGuard")
             return await self._handle_failure(prompt)
 
-    def _build_request(self, prompt: str, think: bool) -> Dict:
+    def _build_request(self, prompt: str, think: bool) -> dict:
         """Build an OpenAI chat-completions request for the guardian."""
         from gateway.core.guardian_client import build_request
         return build_request(

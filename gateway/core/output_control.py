@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Output Control — OWASP LLM05 Countermeasures (Phase 4.3)
 
@@ -20,7 +22,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import yaml
 
@@ -36,7 +38,7 @@ logger = logging.getLogger(__name__)
 class ValidationResult:
     """Result of a schema validation pass."""
     valid: bool = True
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     sanitized: str = ""
 
     def add_error(self, error: str):
@@ -51,8 +53,8 @@ class OutputControlResult:
     schema_validated: bool                 # Whether schema validation passed
     html_escaped: bool                     # Whether HTML escaping was applied
     shell_quoted: bool                     # Whether shell quoting was applied
-    schema_errors: List[str] = field(default_factory=list)
-    byoc_violations: List[str] = field(default_factory=list)
+    schema_errors: list[str] = field(default_factory=list)
+    byoc_violations: list[str] = field(default_factory=list)
     blocked: bool = False
     block_reason: str = ""                 # Why it was blocked (BYOC hard_stop)
 
@@ -89,20 +91,20 @@ class OutputController:
 
     # --- Loading ---
 
-    def _load_schemas(self, path: str) -> Dict[str, Any]:
+    def _load_schemas(self, path: str) -> dict[str, Any]:
         """Load output schemas from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 return data.get("schemas", {}) or {}
         except Exception as e:
             logger.error("Failed to load output schemas from %s: %s", path, e)
             return {}
 
-    def _load_byoc_rules(self, path: str) -> List[Dict[str, Any]]:
+    def _load_byoc_rules(self, path: str) -> list[dict[str, Any]]:
         """Load BYOC output control rules from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 rules = data.get("rules", [])
                 if rules is None:
@@ -196,7 +198,7 @@ class OutputController:
 
     # --- Schema validation (simplified JSON Schema validation) ---
 
-    def _validate_json_schema(self, text: str, schema: Dict[str, Any]) -> ValidationResult:
+    def _validate_json_schema(self, text: str, schema: dict[str, Any]) -> ValidationResult:
         """
         Validate text against a JSON schema (simplified, no external deps).
 
@@ -351,14 +353,14 @@ class OutputController:
 
     # --- Configuration ---
 
-    def get_schemas_summary(self) -> List[Dict[str, str]]:
+    def get_schemas_summary(self) -> list[dict[str, str]]:
         """Return a summary of loaded schemas for debugging/inspection."""
         return [
             {"name": name, "type": schema.get("type", "unknown")}
             for name, schema in self.schemas.items()
         ]
 
-    def get_byoc_rules_summary(self) -> List[Dict[str, str]]:
+    def get_byoc_rules_summary(self) -> list[dict[str, str]]:
         """Return a summary of loaded BYOC rules for debugging/inspection."""
         return [
             {

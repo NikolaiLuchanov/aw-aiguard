@@ -1,27 +1,35 @@
-import httpx
-import logging
-import json
+
+
+from __future__ import annotations
+
 import asyncio
 import hashlib
-import uuid
+import json
+import logging
 import time
-from typing import AsyncGenerator, Dict, List, Optional
+import uuid
+from collections.abc import AsyncGenerator
+from typing import Optional
+
+import httpx
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 
-from gateway.core.guardrail import GuardianGuard, SafetyDecision
-from gateway.core.scanner import PIIScanner
-from gateway.core.hitl import HITLGate, HitlDecision, RequestContext, PendingRequest
-from gateway.core.block import generate_block_response, BlockReason
-from gateway.core.byoc import BYOCEngine, BYOCCheckResult
+from gateway.core.agency_controller import AgencyController
 from gateway.core.audit import AuditLogger
-from gateway.core.provenance import Provenance
-from gateway.core.function_call_detector import FunctionCallDetector, FunctionCallCheckResult
-from gateway.core.sanitizer import IngestionSanitizer
+from gateway.core.block import BlockReason, generate_block_response
+from gateway.core.byoc import BYOCCheckResult, BYOCEngine
+from gateway.core.function_call_detector import (
+    FunctionCallDetector,
+)
+from gateway.core.guardrail import GuardianGuard, SafetyDecision
+from gateway.core.hitl import HitlDecision, HITLGate, PendingRequest, RequestContext
 from gateway.core.output_control import OutputController
-from gateway.core.thinking_mode import ThinkingModeVerifier, ThinkingModeConfig
+from gateway.core.provenance import Provenance
+from gateway.core.sanitizer import IngestionSanitizer
+from gateway.core.scanner import PIIScanner
 from gateway.core.schema_validator import SchemaValidator
-from gateway.core.agency_controller import AgencyController, AgencyCheckResult
+from gateway.core.thinking_mode import ThinkingModeVerifier
 
 # Configure logging for the proxy
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +55,7 @@ class LLMProxy:
         output_controller: Optional[OutputController] = None, # Phase 4.3
         thinking_verifier: Optional[ThinkingModeVerifier] = None,  # Phase 4.4
         agency_controller: Optional[AgencyController] = None,     # Phase 4.6
-        audit_logger: Optional["AuditLogger"] = None,  # type: ignore
+        audit_logger: Optional[AuditLogger] = None,  # type: ignore
         scan_sequence: str = "B"
     ):
         self.target_url = target_url.rstrip("/")
@@ -122,7 +130,7 @@ class LLMProxy:
         hitl_request_id = None
         
         # Extract prompt and body for security checks
-        body: Optional[Dict] = None
+        body: Optional[dict] = None
         prompt = ""
         if content:
             try:
@@ -634,13 +642,13 @@ class LLMProxy:
         except httpx.RequestError as exc:
             logger.error(f"Network error forwarding {method} {path}: {exc}")
             return Response(content="Bad Gateway: Could not reach LLM provider", status_code=502)
-        except Exception as exc:
-            logger.exception(f"Unexpected error forwarding {method} {path}: {exc}")
+        except Exception:
+            logger.exception(f"Unexpected error forwarding {method} {path}")
             return Response(content="Internal Server Error", status_code=500)
 
 
 
-    def _extract_tool_calls(self, body: Optional[Dict]) -> Optional[List[dict]]:
+    def _extract_tool_calls(self, body: Optional[dict]) -> Optional[list[dict]]:
         """
         Extract tool calls from an LLM API request/response body.
 
@@ -745,6 +753,6 @@ class LLMProxy:
         except httpx.RequestError as exc:
             logger.error(f"Network error forwarding HITL-resume request: {exc}")
             return Response(content="Bad Gateway: Could not reach LLM provider", status_code=502)
-        except Exception as exc:
-            logger.exception(f"Unexpected error forwarding HITL-resume request: {exc}")
+        except Exception:
+            logger.exception("Unexpected error forwarding HITL-resume request")
             return Response(content="Internal Server Error", status_code=500)

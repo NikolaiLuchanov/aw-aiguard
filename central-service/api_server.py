@@ -1,3 +1,9 @@
+
+
+from __future__ import annotations
+
+from typing import Optional
+
 """
 aw-aiguard: Central Service API server.
 
@@ -5,26 +11,30 @@ FastAPI application that receives async audit events from the gateway proxy,
 manages settings sync, and dispatches alerts to configured channels.
 """
 
+import asyncio
+import logging
 import os
 import sys
-import logging
-import asyncio
-from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Dict, List, Optional
+from contextlib import asynccontextmanager, suppress
 
 import httpx
 import yaml
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 # Ensure central-service is importable (works both in Docker and local dev)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from audit_db import AuditDB, AuditEvent, SettingsChange, ProvenanceEvent
+from audit_db import AuditDB, AuditEvent, ProvenanceEvent, SettingsChange
 from partition_manager import PartitionManager
 from ui import setup_template_serving
-from shared.schemas import BYOCRuleCreate, SettingsOverrideChange, HitlCreateRequest, GatewayHeartbeat
+
+from shared.schemas import (
+    BYOCRuleCreate,
+    GatewayHeartbeat,
+    HitlCreateRequest,
+    SettingsOverrideChange,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -40,11 +50,11 @@ CENTRAL_SERVICE_PORT = int(os.getenv("CENTRAL_SERVICE_PORT", "8000"))
 # ------------------------------------------------------------------ #
 
 audit_db = AuditDB()
-alert_engine: Optional["AlertEngine"] = None
+alert_engine: Optional[AlertEngine] = None
 partition_manager: Optional[PartitionManager] = None
 
 
-def _load_settings_yaml() -> Dict:
+def _load_settings_yaml() -> dict:
     """Load settings.yaml from guardrail-config (mounted or local)."""
     config_paths = [
         os.path.join(os.path.dirname(__file__), "..", "guardrail-config", "settings.yaml"),
@@ -160,10 +170,8 @@ async def lifespan(app: FastAPI):
     # Shutdown
     if hasattr(app.state, "partition_cycle_task"):
         app.state.partition_cycle_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await app.state.partition_cycle_task
-        except asyncio.CancelledError:
-            pass
     await partition_manager.close()
     await audit_db.close()
     logger.info("Central Service shut down.")
@@ -212,7 +220,7 @@ async def audit_log(event: AuditEvent):
 
 
 @app.post("/audit/batch")
-async def audit_batch(events: List[AuditEvent]):
+async def audit_batch(events: list[AuditEvent]):
     """Receive a batch of audit events (buffer replay / bulk insert)."""
     try:
         count = await audit_db.batch_insert_audit_logs(events)
@@ -456,7 +464,7 @@ async def dashboard_settings_sync_now(developer_id: str = "default"):
         pass  # Best-effort audit logging
     return JSONResponse(content={
         "status": "queued",
-        "message": f"Settings sync will be applied on gateway's next poll cycle.",
+        "message": "Settings sync will be applied on gateway's next poll cycle.",
     })
 
 

@@ -49,7 +49,7 @@ aw-aiguard/                          # Project root
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 712 pytest unit tests
+├── tests/                            # 757 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures (temp YAML files, sample events, mock responses, env isolation)
 │   ├── red_team/                     # 85 adversarial test cases (Phase 5.1)
 │   │   ├── test_direct_injection.py  # 16 tests: jailbreak, exfiltration, action hijack, PII
@@ -228,4 +228,4 @@ aw-aiguard/                          # Project root
 | Shared Schemas | `test_schemas.py` | 9 |
 | Tools Threat Probe | `test_threat_probe.py` | 55 |
 | Smoke/Env | `test_smoke_env.py` | 21 |
-| | **Total** | **712** |
+| | **Total** | **757** |

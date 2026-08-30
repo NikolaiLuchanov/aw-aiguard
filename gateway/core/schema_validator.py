@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 CaMeL Structural Enforcement — Schema Validator (Phase 4.5.1)
 
@@ -11,13 +13,12 @@ Rules loaded from guardrail-config/camel_rules.yaml.
 Phase 4.5.1 deliverable — Layer L0/L4 of the safety pipeline.
 """
 
-import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import yaml
 import jsonschema
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ValidationResult:
     """Result of a JSON schema validation pass."""
     valid: bool = True
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     tool_name: str = ""
 
 
@@ -64,20 +65,20 @@ class SchemaValidator:
 
     # --- Loading ---
 
-    def _load_schemas(self, path: str) -> Dict[str, Any]:
+    def _load_schemas(self, path: str) -> dict[str, Any]:
         """Load tool schemas from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 return data.get("schemas", {}) or {}
         except Exception as e:
             logger.error("Failed to load tool schemas from %s: %s", path, e)
             return {}
 
-    def _load_rules(self, path: str) -> List[Dict[str, Any]]:
+    def _load_rules(self, path: str) -> list[dict[str, Any]]:
         """Load CaMeL enforcement rules from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 rules = data.get("rules", [])
                 if rules is None:
@@ -92,7 +93,7 @@ class SchemaValidator:
     def validate(
         self,
         tool_name: str,
-        parameters: Dict[str, Any],
+        parameters: dict[str, Any],
     ) -> ValidationResult:
         """
         Validate tool-call parameters against the registered JSON schema.
@@ -139,11 +140,11 @@ class SchemaValidator:
 
         return result
 
-    def get_schema_names(self) -> List[str]:
+    def get_schema_names(self) -> list[str]:
         """Return list of registered schema names (for dashboard/status)."""
         return list(self.schemas.keys())
 
-    def get_rule_names(self) -> List[str]:
+    def get_rule_names(self) -> list[str]:
         """Return list of loaded rule names (for dashboard/status)."""
         return [r.get("name", "") for r in self.rules]
 

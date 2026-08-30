@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Optional
 
 SUPPORTED_SOURCE_TYPES = frozenset({
     "repository",
@@ -38,7 +37,7 @@ class Provenance:
     hop_depth: int = 0
     max_hop_depth: int = 3
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Serialize to dict for JSON/audit/log storage."""
         return {
             "source_id": self.source_id,
@@ -51,14 +50,14 @@ class Provenance:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "Provenance":
+    def from_dict(cls, data: dict) -> Provenance:
         """Deserialize from a dict (e.g. from JSON body or header parsing)."""
         return cls(
             source_id=str(data.get("source_id", "unknown")),
             source_type=str(data.get("source_type", "unknown")),
             trust_level=float(data.get("trust_level", 0.0)),
             ingested_at=datetime.fromisoformat(data["ingested_at"])
-                if "ingested_at" in data and data["ingested_at"]
+                if data.get("ingested_at")
                 else datetime.now(timezone.utc),
             source_chain=data.get("source_chain", []),
             hop_depth=int(data.get("hop_depth", 0)),
@@ -66,7 +65,7 @@ class Provenance:
         )
 
     @classmethod
-    def default(cls) -> "Provenance":
+    def default(cls) -> Provenance:
         """Maximum suspicion: unknown source, zero trust."""
         return cls(
             source_id="unknown",
@@ -75,7 +74,7 @@ class Provenance:
         )
 
     @classmethod
-    def from_headers(cls, headers: Dict) -> "Provenance":
+    def from_headers(cls, headers: dict) -> Provenance:
         """
         Extract provenance from HTTP request headers.
 
@@ -130,7 +129,7 @@ class Provenance:
 
     # --- Phase 4.5: Agency constraints ---
 
-    def increment_depth(self) -> "Provenance":
+    def increment_depth(self) -> Provenance:
         """Increment hop_depth and add current provenance to source_chain. Returns self for chaining."""
         self.hop_depth += 1
         self.source_chain.append({

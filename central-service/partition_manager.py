@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 aw-aiguard: Partition Lifecycle Manager.
 
@@ -14,14 +16,15 @@ Usage:
     await pm.close()
 """
 
-import os
-import re
 import gzip
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+import os
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
+import aiofiles
 import asyncpg
 from minio import Minio
 
@@ -50,7 +53,7 @@ class PartitionManager:
     """
 
     @staticmethod
-    def _load_settings() -> Dict:
+    def _load_settings() -> dict:
         """Load settings.yaml from guardrail-config (Finding #7 — audit_ttl_days YAML fallback)."""
         config_paths = [
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "guardrail-config", "settings.yaml"),
@@ -126,7 +129,7 @@ class PartitionManager:
     # Core lifecycle: run_full_cycle
     # ------------------------------------------------------------------ #
 
-    async def run_full_cycle(self) -> Dict[str, Any]:
+    async def run_full_cycle(self) -> dict[str, Any]:
         """
         Execute the full partition lifecycle in one call.
 
@@ -138,7 +141,7 @@ class PartitionManager:
                 "errors": [...]
             }
         """
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "archived_partitions": 0,
             "dropped_partitions": 0,
             "created_partitions": 0,
@@ -190,7 +193,7 @@ class PartitionManager:
     # Step 1: List archivable partitions
     # ------------------------------------------------------------------ #
 
-    async def list_archivable_partitions(self) -> List[Dict[str, Any]]:
+    async def list_archivable_partitions(self) -> list[dict[str, Any]]:
         """Find partitions whose data is older than retention_days."""
         if not self._pool:
             raise RuntimeError("Not connected. Call connect() first.")
@@ -209,8 +212,10 @@ class PartitionManager:
             """)
 
         # Filter by actual data age (not just partition bounds)
-        cutoff = datetime.utcnow() - timedelta(days=self.retention_days)
-        result: List[Dict[str, Any]] = []
+        # created_at is TIMESTAMPTZ, so asyncpg returns an aware datetime;
+        # the cutoff must be aware too, or the comparison raises TypeError.
+        cutoff = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
+        result: list[dict[str, Any]] = []
 
         for row in rows:
             max_date = await conn.fetchval(
@@ -256,16 +261,16 @@ class PartitionManager:
 
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
-                async for record in cur.dictcursor(
-                    """SELECT api_key, event_type, component, reason, prompt_hash,
-                              provenance, blocked_by, request_id, details, created_at
-                       FROM audit_logs WHERE tableoid = (
-                           SELECT oid FROM pg_class WHERE relname = $1
-                       ) ORDER BY created_at""",
-                    partition_name,
-                ):
-                    with open(jsonl_path, "a") as f:
-                        f.write(_record_to_json(record) + "\n")
+                async with aiofiles.open(jsonl_path, "a") as f:
+                    async for record in cur.dictcursor(
+                        """SELECT api_key, event_type, component, reason, prompt_hash,
+                                  provenance, blocked_by, request_id, details, created_at
+                           FROM audit_logs WHERE tableoid = (
+                               SELECT oid FROM pg_class WHERE relname = $1
+                           ) ORDER BY created_at""",
+                        partition_name,
+                    ):
+                        await f.write(_record_to_json(record) + "\n")
 
         # Get original size before compression
         original_size = os.path.getsize(jsonl_path)
@@ -279,7 +284,7 @@ class PartitionManager:
             "year": year,
             "month": month,
             "partition_name": partition_name,
-            "archived_at": datetime.utcnow().isoformat() + "Z",
+            "archived_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "row_count": 0,  # Will be updated below
             "original_size_bytes": original_size,
             "compressed_size_bytes": compressed_size,
@@ -311,21 +316,20 @@ class PartitionManager:
         if not self._pool:
             raise RuntimeError("Not connected. Call connect() first.")
 
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                # Detach (non-blocking)
-                await conn.execute(
-                    f"ALTER TABLE audit_logs DETACH PARTITION {partition_name}"
-                )
-                # Drop
-                await conn.execute(f"DROP TABLE {partition_name}")
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Detach (non-blocking)
+            await conn.execute(
+                f"ALTER TABLE audit_logs DETACH PARTITION {partition_name}"
+            )
+            # Drop
+            await conn.execute(f"DROP TABLE {partition_name}")
         logger.info("Dropped partition %s.", partition_name)
 
     # ------------------------------------------------------------------ #
     # Step 4: Create future partitions
     # ------------------------------------------------------------------ #
 
-    def _generate_future_partitions(self, count: int = 3) -> List[Tuple[str, str, str]]:
+    def _generate_future_partitions(self, count: int = 3) -> list[tuple[str, str, str]]:
         """
         Generate (partition_name, start_date, end_date) for future months.
 
@@ -334,9 +338,7 @@ class PartitionManager:
           (audit_logs_y2026m09, 2026-09-01 00:00:00+00, 2026-10-01 00:00:00+00)
           (audit_logs_y2026m10, 2026-10-01 00:00:00+00, 2026-11-01 00:00:00+00)
         """
-        from datetime import date
-
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         results = []
         for i in range(1, count + 1):
             year = today.year
@@ -399,9 +401,10 @@ class PartitionManager:
 
         # Compress the file
         gz_path = file_path + ".gz"
-        with open(file_path, "rb") as f_in:
-            with gzip.open(gz_path, "wb") as f_out:
-                f_out.write(f_in.read())
+        async with aiofiles.open(file_path, "rb") as f_in:
+            data = await f_in.read()
+        async with aiofiles.open(gz_path, "wb") as f_out:
+            await f_out.write(gzip.compress(data))
 
         compressed_size = os.path.getsize(gz_path)
         self._minio_client.fput_object(
@@ -417,8 +420,8 @@ class PartitionManager:
             raise RuntimeError("Not connected. Call connect() first.")
 
         json_path = os.path.join(self._temp_dir, f"manifest_{object_name.replace('/', '_')}")
-        with open(json_path, "w") as f:
-            json.dump(data, f, indent=2)
+        async with aiofiles.open(json_path, "w") as f:
+            await f.write(json.dumps(data, indent=2))
 
         full_key = f"{prefix}/{object_name}"
         self._minio_client.fput_object(self.minio_bucket, full_key, json_path)

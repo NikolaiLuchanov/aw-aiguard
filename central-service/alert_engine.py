@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 aw-aiguard: Multi-channel Alert Engine.
 
@@ -6,15 +8,13 @@ based on event severity levels.
 """
 
 import asyncio
-import os
 import logging
+import os
 import smtplib
 from email.message import EmailMessage
-from typing import Any, Dict, List, Optional
 
 import httpx
 import yaml
-from pydantic import BaseModel
 
 # Import AuditEvent from the db layer to maintain type consistency
 from audit_db import AuditEvent
@@ -27,7 +27,7 @@ class AlertEngine:
     def __init__(self):
         self.channels = self._load_channels()
 
-    def _load_channels(self) -> Dict[str, Dict]:
+    def _load_channels(self) -> dict[str, dict]:
         """Load channel config from .env and settings.yaml."""
         channels = {}
         # Read alert_channels from guardrail-config/settings.yaml
@@ -95,7 +95,7 @@ class AlertEngine:
             except Exception:
                 logger.exception(f"Alert failed for channel {channel_name}")
 
-    async def _send_telegram(self, config: Dict, severity: str, message: str):
+    async def _send_telegram(self, config: dict, severity: str, message: str):
         emoji = {"CRITICAL": "🔴", "ESCALATE": "🔴", "HIGH": "🟠", "WARNING": "🟡", "NOTICE": "⚪"}.get(severity, "⚪")
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(
@@ -106,14 +106,14 @@ class AlertEngine:
                 },
             )
 
-    async def _send_slack(self, config: Dict, severity: str, message: str):
+    async def _send_slack(self, config: dict, severity: str, message: str):
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(
                 config["webhook_url"],
                 json={"text": f"[{severity}] aw-aiguard: {message}"},
             )
 
-    async def _send_email(self, config: Dict, severity: str, message: str, event: AuditEvent):
+    async def _send_email(self, config: dict, severity: str, message: str, event: AuditEvent):
         """Send alert via SMTP (stdlib smtplib, offloaded to thread pool)."""
         if not config.get("host"):
             return
@@ -133,7 +133,7 @@ class AlertEngine:
             lambda: self._smtp_send(config, msg),
         )
 
-    def _smtp_send(self, config: Dict, msg):
+    def _smtp_send(self, config: dict, msg):
         """Blocking SMTP send — must run in executor."""
         try:
             with smtplib.SMTP(config["host"], config["port"], timeout=10) as server:

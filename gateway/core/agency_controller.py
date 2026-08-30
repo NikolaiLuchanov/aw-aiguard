@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Agency Constraints — Delegation Depth Limits & Chain Integrity (Phase 4.6)
 
@@ -11,7 +13,7 @@ Phase 4.6 deliverable — Layer L5.2 of the safety pipeline.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -60,10 +62,10 @@ class AgencyController:
 
     # --- Loading ---
 
-    def _load_rules(self, path: str) -> Dict[str, Any]:
+    def _load_rules(self, path: str) -> dict[str, Any]:
         """Load agency rules from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 rules = data.get("rules", {})
                 if rules is None:
@@ -121,13 +123,12 @@ class AgencyController:
             )
 
         # Check 4: MCP server vetting
-        if mcp_server:
-            if not self.validate_mcp_server(mcp_server):
-                return AgencyCheckResult(
-                    allowed=False,
-                    reason=f"MCP server '{mcp_server}' not vetted",
-                    rule_name="mcp_vetting",
-                )
+        if mcp_server and not self.validate_mcp_server(mcp_server):
+            return AgencyCheckResult(
+                allowed=False,
+                reason=f"MCP server '{mcp_server}' not vetted",
+                rule_name="mcp_vetting",
+            )
 
         return AgencyCheckResult(
             allowed=True,
@@ -163,7 +164,7 @@ class AgencyController:
                 return True
             return server_url in allowlist
 
-    def get_config_summary(self) -> Dict[str, Any]:
+    def get_config_summary(self) -> dict[str, Any]:
         """Return a summary of agency controller configuration."""
         return {
             "max_delegation_depth": self.max_depth,

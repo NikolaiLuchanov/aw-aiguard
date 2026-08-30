@@ -21,12 +21,13 @@ log_only rules are elevated to warn, triggering audit alerts for dangerous patte
 
 Phase 4.2 deliverable — Layer 2+ of the safety pipeline.
 """
+from __future__ import annotations
 
 import logging
 import re
 import unicodedata
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, ClassVar, Optional
 
 import yaml
 
@@ -63,7 +64,7 @@ class IngestionSanitizer:
     """
 
     # Compiled regex cache to avoid recompilation
-    _compiled_cache: Dict[str, re.Pattern] = {}
+    _compiled_cache: ClassVar[dict[str, re.Pattern]] = {}
 
     def __init__(self, rules_path: str, action_mode: Optional[str] = None):
         """
@@ -78,10 +79,10 @@ class IngestionSanitizer:
         self.action_mode = action_mode
         self._compile_patterns()
 
-    def _load_rules(self, path: str) -> List[Dict[str, Any]]:
+    def _load_rules(self, path: str) -> list[dict[str, Any]]:
         """Load sanitization rules from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f) or {}
                 patterns = data.get("patterns", [])
                 if patterns is None:
@@ -93,7 +94,7 @@ class IngestionSanitizer:
 
     def _compile_patterns(self):
         """Pre-compile all regex patterns for performance."""
-        self._compiled_cache = {}
+        IngestionSanitizer._compiled_cache = {}
         for rule in self.rules:
             name = rule.get("name", "")
             pattern_str = rule.get("pattern", "").strip()  # Strip whitespace/newlines from | block scalars
@@ -117,7 +118,7 @@ class IngestionSanitizer:
             except re.error as e:
                 logger.error("Invalid regex pattern '%s': %s", name, e)
 
-    def _resolve_action(self, rule: Dict[str, Any]) -> str:
+    def _resolve_action(self, rule: dict[str, Any]) -> str:
         """Resolve the effective action for a rule."""
         if self.action_mode:
             return self.action_mode
@@ -149,13 +150,12 @@ class IngestionSanitizer:
         is_aggressive = provenance is not None and provenance.is_low_trust
 
         stripped_count = 0
-        dangerous_patterns: List[str] = []
-        action_taken: Dict[str, str] = {}
+        dangerous_patterns: list[str] = []
+        action_taken: dict[str, str] = {}
 
         # Step 2: Apply all patterns in order
         for rule in self.rules:
             name = rule.get("name", "")
-            severity = rule.get("severity", "low")
             action = self._resolve_action(rule)
             compiled = self._compiled_cache.get(name)
 
@@ -180,7 +180,6 @@ class IngestionSanitizer:
             if not match:
                 continue
 
-            match_count = len(compiled.findall(text))
             text, count = self._apply_pattern(text, rule, effective_action)
             stripped_count += count
 
@@ -205,7 +204,7 @@ class IngestionSanitizer:
             action_taken=action_taken,
         )
 
-    def _apply_pattern(self, content: str, rule: Dict[str, Any], action: str) -> tuple:
+    def _apply_pattern(self, content: str, rule: dict[str, Any], action: str) -> tuple:
         """
         Apply a single regex pattern to content.
 
@@ -246,7 +245,7 @@ class IngestionSanitizer:
         # Unknown action — treat as log_only (safe default)
         return content, match_count
 
-    def get_rules_summary(self) -> List[Dict[str, str]]:
+    def get_rules_summary(self) -> list[dict[str, str]]:
         """Return a summary of loaded rules for debugging/inspection."""
         return [
             {

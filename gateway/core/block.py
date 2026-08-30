@@ -1,13 +1,18 @@
+
+
 """
 Block Response Generator
 
 Centralized utility for generating standardized JSON responses
 when the proxy intercepts and blocks a request.
 """
+from __future__ import annotations
 
 import json
 from typing import Optional
+
 from fastapi import Response
+
 
 # Predefined block reason codes
 class BlockReason:

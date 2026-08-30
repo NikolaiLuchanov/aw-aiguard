@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Function-Calling Hallucination Detection (Phase 4.1)
 
@@ -25,12 +27,12 @@ Architecture note:
 import json
 import logging
 import os
-import yaml
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
+import yaml
 
 from gateway.core.guardrail import GuardianGuard, SafetyDecision
-from gateway.core.block import BlockReason
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +71,10 @@ class FunctionCallDetector:
         self.rules = self._load_rules(rules_path)
         self.guardian = guardian or self._create_guardian_from_rules()
 
-    def _load_rules(self, path: str) -> Dict[str, Any]:
+    def _load_rules(self, path: str) -> dict[str, Any]:
         """Load rules from YAML file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             logger.error("Failed to load function_call rules from %s: %s", path, e)
@@ -98,7 +100,7 @@ class FunctionCallDetector:
             api_key=os.getenv("GUARDIAN_API_KEY", ""),
         )
 
-    def should_check(self, tool_calls: List[dict], provenance) -> bool:
+    def should_check(self, tool_calls: list[dict], provenance) -> bool:
         """
         Determine whether the detector should run for this request.
 
@@ -128,7 +130,7 @@ class FunctionCallDetector:
 
     async def check(
         self,
-        tool_calls: List[dict],
+        tool_calls: list[dict],
         provenance,
     ) -> FunctionCallCheckResult:
         """
@@ -169,11 +171,11 @@ class FunctionCallDetector:
                 message="Function-call check flagged (audit mode)",
             )
 
-        except Exception as e:
-            logger.exception("Unexpected error in FunctionCallDetector: %s", str(e))
+        except Exception:
+            logger.exception("Unexpected error in FunctionCallDetector")
             return await self._handle_failure()
 
-    def _build_prompt(self, tool_calls: List[dict]) -> str:
+    def _build_prompt(self, tool_calls: list[dict]) -> str:
         """Serialize tool calls for the guardian's function-hallucination prompt."""
         return json.dumps(tool_calls, indent=2)
 

@@ -37,3 +37,27 @@ exclude_lines = [
     "raise NotImplementedError",
     "FUTURE:",
 ]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["F", "I", "UP", "FA", "RUF012", "SIM", "PLR1722", "EXE001"]
+ignore = [
+    # Broad except at trust boundaries is a deliberate fail-safe in security middleware.
+    # Narrowing to specific exceptions risks allowing unvalidated requests through.
+    "BLE001",
+    # try/except/pass is intentional for silent failure modes (e.g. background cleanup loops).
+    "S110",
+    # contextlib.suppress is less readable for async cancellation patterns.
+    "SIM105",
+    # Nested `with` is clearer for asyncpg pool+cursor/transaction semantics.
+    "SIM117",
+    # Nested `if` preserves readability when each guard has a distinct intent.
+    "SIM102",
+    # PEP 604 union (X | None) not supported at runtime on Python 3.9 without eval_type_backport.
+    "UP045",
+]
+
+[tool.ruff.lint.isort]
+force-single-line = false

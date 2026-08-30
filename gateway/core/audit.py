@@ -1,3 +1,5 @@
+
+
 """
 aw-aiguard: Async Audit Logger.
 
@@ -5,12 +7,14 @@ Queues audit events and drains them to the cloud backend without blocking
 the request. Falls back to a local JSONL buffer if the backend is unreachable,
 and replays the buffer when it comes back online.
 """
+from __future__ import annotations
 
-import os
-import json
 import asyncio
-import logging
+import contextlib
 import hashlib
+import json
+import logging
+import os
 from typing import Optional
 
 import aiofiles
@@ -100,10 +104,8 @@ class AuditLogger:
         """Flush remaining events and shut down."""
         if self._worker_task:
             self._worker_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._worker_task
-            except asyncio.CancelledError:
-                pass
         await self._flush_remaining()
         await self._client.aclose()
         logger.info("AuditLogger stopped.")
@@ -185,7 +187,7 @@ class AuditLogger:
 
         events = []
         try:
-            async with aiofiles.open(self.buffer_path, "r") as f:
+            async with aiofiles.open(self.buffer_path) as f:
                 async for line in f:
                     line = line.strip()
                     if line:
@@ -195,10 +197,8 @@ class AuditLogger:
             return
 
         if not events:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(self.buffer_path)
-            except OSError:
-                pass
             return
 
         logger.info("Replaying %d events from buffer...", len(events))

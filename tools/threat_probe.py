@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """
 threat_probe.py — Threat Model Probe Tool
 
@@ -18,7 +20,6 @@ Environment variables:
 
 import argparse
 import asyncio
-import httpx
 import json
 import logging
 import os
@@ -26,16 +27,16 @@ import re
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Dict, Any
+
+import httpx
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from gateway.core.byoc import BYOCCheckResult, BYOCEngine
 from gateway.core.guardrail import SafetyDecision
-from gateway.core.scanner import PIIScanner
-from gateway.core.byoc import BYOCEngine, BYOCCheckResult
 from gateway.core.provenance import Provenance
-
+from gateway.core.scanner import PIIScanner
 
 logger = logging.getLogger("threat_probe")
 
@@ -81,9 +82,9 @@ class LayerResult:
 @dataclass
 class ProbeResult:
     prompt: str
-    layers: List[LayerResult] = field(default_factory=list)
+    layers: list[LayerResult] = field(default_factory=list)
     final_status: str = ""
-    threat_categories: List[ThreatCategory] = field(default_factory=list)
+    threat_categories: list[ThreatCategory] = field(default_factory=list)
     summary: str = ""
 
 
@@ -91,7 +92,7 @@ class ProbeResult:
 # Provenance layer (L0)
 # --------------------------------------------------------------------------- #
 
-async def probe_l0_provenance(prompt: str, headers: Optional[Dict] = None) -> LayerResult:
+async def probe_l0_provenance(prompt: str, headers: dict | None = None) -> LayerResult:
     """
     L0: Provenance extraction and trust level assessment.
     Tags data source and trust level from HTTP headers (or defaults if missing).
@@ -132,7 +133,7 @@ async def probe_l0_provenance(prompt: str, headers: Optional[Dict] = None) -> La
 # PII Scanner layer (L1)
 # --------------------------------------------------------------------------- #
 
-def probe_l1_pii_scanner(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
+def probe_l1_pii_scanner(prompt: str, rules_path: str | None = None) -> LayerResult:
     """
     L1: PII/Secrets scanning via regex pattern matching.
     Detects AWS keys, private keys, emails, and custom patterns.
@@ -149,7 +150,7 @@ def probe_l1_pii_scanner(prompt: str, rules_path: Optional[str] = None) -> Layer
         block_mode="block",
     )
 
-    redacted, decision = scanner.scan_text(prompt)
+    _, decision = scanner.scan_text(prompt)
 
     if decision == SafetyDecision.BLOCK:
         status = LayerStatus.BLOCK
@@ -182,7 +183,7 @@ def probe_l1_pii_scanner(prompt: str, rules_path: Optional[str] = None) -> Layer
 # Guardian pre-flight layer (L2)
 # --------------------------------------------------------------------------- #
 
-async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> LayerResult:
+async def probe_l2_guardian(prompt: str, guardian_url: str | None = None) -> LayerResult:
     """
     L2: Guardian pre-flight safety check via cloud API.
     Sends prompt to Guardian model using OpenAI chat-completions protocol.
@@ -215,7 +216,7 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
                     layer="Guardian Pre-flight (L2)",
                     layer_num=2,
                     status=LayerStatus.PASS,
-                    details=f"Guardian score: YES — safety check passed",
+                    details="Guardian score: YES — safety check passed",
                 )
             elif score == "no":
                 return LayerResult(
@@ -249,7 +250,7 @@ async def probe_l2_guardian(prompt: str, guardian_url: Optional[str] = None) -> 
         )
 
 
-def _parse_guardian_score(content: str) -> Optional[str]:
+def _parse_guardian_score(content: str) -> str | None:
     """Parse yes/no from Guardian's free-text output.
 
     Handles <score>yes</score>, bare yes/no, and thinking-mode traces.
@@ -257,7 +258,6 @@ def _parse_guardian_score(content: str) -> Optional[str]:
     """
     content = content.strip()
     # XML tag first (highest confidence)
-    import re
     m = re.search(r"<score>(yes|no)</score>", content, re.IGNORECASE)
     if m:
         return m.group(1).lower()
@@ -273,7 +273,7 @@ def _parse_guardian_score(content: str) -> Optional[str]:
 # BYOC stop-limits layer (L3)
 # --------------------------------------------------------------------------- #
 
-def probe_l3_byoc(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
+def probe_l3_byoc(prompt: str, rules_path: str | None = None) -> LayerResult:
     """
     L3: BYOC stop-limits enforcement.
     Checks against codified 'never do this' rules (exfiltration, prompt override).
@@ -323,7 +323,7 @@ def probe_l3_byoc(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
 # HITL gate layer (L4)
 # --------------------------------------------------------------------------- #
 
-def probe_l4_hitl(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
+def probe_l4_hitl(prompt: str, rules_path: str | None = None) -> LayerResult:
     """
     L4: Human-in-the-Loop gate for irreversible actions.
     Checks if prompt triggers any irreversible action patterns.
@@ -345,8 +345,6 @@ def probe_l4_hitl(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
 
     # HITLGate.check_hitl is async, but it only does regex matching.
     # We run it on a fresh loop to avoid conflicts with the outer event loop.
-    import uuid
-    import time
     # Inline the check to avoid event-loop nesting:
     # Just iterate rules and do regex search directly
     for rule in hitl.rules:
@@ -355,7 +353,7 @@ def probe_l4_hitl(prompt: str, rules_path: Optional[str] = None) -> LayerResult:
                 layer="HITL Gate (L4)",
                 layer_num=4,
                 status=LayerStatus.BLOCK,
-                details=f"Request would be paused for human approval",
+                details="Request would be paused for human approval",
                 triggered_rule=rule['name'],
                 threat_category=ThreatCategory.ACTION_HIJACK,
             )
@@ -402,7 +400,7 @@ def probe_l6_output_validation(prompt: str) -> LayerResult:
 # Threat classification heuristics
 # --------------------------------------------------------------------------- #
 
-def classify_threats(prompt: str) -> List[ThreatCategory]:
+def classify_threats(prompt: str) -> list[ThreatCategory]:
     """
     Heuristic classification of prompt against summary.md attack categories.
     Returns list of matching threat categories.
@@ -461,11 +459,11 @@ def classify_threats(prompt: str) -> List[ThreatCategory]:
 
 async def probe_prompt(
     prompt: str,
-    guardian_url: Optional[str] = None,
-    byoc_rules_path: Optional[str] = None,
-    scan_rules_path: Optional[str] = None,
-    hitl_rules_path: Optional[str] = None,
-    provenance_headers: Optional[Dict] = None,
+    guardian_url: str | None = None,
+    byoc_rules_path: str | None = None,
+    scan_rules_path: str | None = None,
+    hitl_rules_path: str | None = None,
+    provenance_headers: dict | None = None,
 ) -> ProbeResult:
     """
     Run a full threat model probe against all security layers.
@@ -554,7 +552,7 @@ def _build_summary(result: ProbeResult) -> str:
 def print_result(result: ProbeResult, verbose: bool = True):
     """Print probe result to stdout."""
     print("\n" + "=" * 70)
-    print(f"  THREAT MODEL PROBE")
+    print("  THREAT MODEL PROBE")
     print(f"  Prompt: {result.prompt[:80]}{'...' if len(result.prompt) > 80 else ''}")
     print("=" * 70)
 
@@ -562,7 +560,7 @@ def print_result(result: ProbeResult, verbose: bool = True):
 
     if verbose and result.threat_categories:
         print("\nTHREAT ANALYSIS:")
-        print(f"  The prompt matches these attack categories from summary.md:")
+        print("  The prompt matches these attack categories from summary.md:")
         for cat in result.threat_categories:
             desc = {
                 ThreatCategory.DIRECT_INJECTION: "User sends malicious instructions directly",
@@ -579,7 +577,7 @@ def print_result(result: ProbeResult, verbose: bool = True):
     print()
 
 
-async def probe_batch(prompts: List[str], **kwargs) -> List[ProbeResult]:
+async def probe_batch(prompts: list[str], **kwargs) -> list[ProbeResult]:
     """Run probes on multiple prompts sequentially."""
     # Extract output_mode from kwargs (set by CLI: 'human' or 'json')
     output_mode = kwargs.pop("output_mode", "human")

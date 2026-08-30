@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Guardian wire protocol: llama.cpp OpenAI-compatible /v1/chat/completions.
 
@@ -32,10 +34,9 @@ Protocol:
 
   Auth: optional Bearer token via GUARDIAN_API_KEY (llama.cpp --api-key).
 """
-import json
 import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("aw-aiguard.guardian")
 
@@ -46,10 +47,10 @@ _SCORE_TAG = re.compile(r"<score>\s*(yes|no)\s*</score>", re.IGNORECASE)
 _WHOLE_WORD = re.compile(r"\b(yes|no)\b", re.IGNORECASE)
 
 
-def load_prompts(path: str) -> Dict[str, Dict[str, str]]:
+def load_prompts(path: str) -> dict[str, dict[str, str]]:
     """Load guardian_prompts.yaml. Raises on missing file (config is required)."""
     import yaml
-    with open(path, "r") as f:
+    with open(path) as f:
         return yaml.safe_load(f)
 
 
@@ -57,9 +58,9 @@ def build_request(
     prompt: str,
     model: str,
     think: bool,
-    prompts: Dict[str, Dict[str, str]],
+    prompts: dict[str, dict[str, str]],
     api_key: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build an OpenAI chat-completions request for the guardian.
 
     Args:
@@ -73,7 +74,7 @@ def build_request(
         Dict with keys "body" (the JSON payload) and "headers" (HTTP headers).
     """
     tpl = prompts["thinking" if think else "fast"]
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": tpl["system"].strip()},
@@ -92,9 +93,9 @@ def build_request(
 def build_function_request(
     tool_calls_json: str,
     model: str,
-    prompts: Dict[str, Dict[str, str]],
+    prompts: dict[str, dict[str, str]],
     api_key: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a function-hallucination request for the guardian.
 
     Args:
@@ -107,7 +108,7 @@ def build_function_request(
         Dict with keys "body" (the JSON payload) and "headers" (HTTP headers).
     """
     tpl = prompts["function_hallucination"]
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": tpl["system"].strip()},

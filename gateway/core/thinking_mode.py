@@ -1,3 +1,9 @@
+
+
+from __future__ import annotations
+
+from typing import Optional
+
 """
 Thinking-Mode Verification — Selective Post-Response Guardian Check
 
@@ -16,9 +22,9 @@ Behavior:
 """
 
 import logging
-import yaml
 from pathlib import Path
-from typing import Optional, Tuple
+
+import yaml
 
 from gateway.core.guardrail import GuardianGuard, SafetyDecision
 from gateway.core.provenance import Provenance
@@ -53,7 +59,7 @@ class ThinkingModeConfig:
         self.log_all = log_all
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> "ThinkingModeConfig":
+    def from_yaml(cls, yaml_path: str) -> ThinkingModeConfig:
         """Load configuration from YAML file."""
         path = Path(yaml_path)
         if not path.exists():
@@ -131,7 +137,7 @@ class ThinkingModeVerifier:
 
         return False
 
-    async def verify(self, response_text: str) -> Tuple[SafetyDecision, str]:
+    async def verify(self, response_text: str) -> tuple[SafetyDecision, str]:
         """
         Run thinking-mode Guardian check on the response text.
 

@@ -153,7 +153,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `scan_rules.yaml` — PII/Secrets detection rules (PCI DSS credit card, GDPR IP/passport/phone, AWS keys, private keys)
   - `settings.yaml` — Guardian thresholds, safety mode, alert channels
 - `docs/`: Architecture specs and workflow diagrams.
-- `tests/`: **712** pytest tests covering all safety layers and Phase 3.3 HITL cloud persistence.
+- `tests/`: **757** pytest tests covering all safety layers and Phase 5 HITL cloud persistence.
   - `shared/test_schemas.py` — AuditEvent, ProvenanceEvent, SettingsChange model validation
   - `gateway/test_guardrail.py` — GuardianGuard: allow/block/warn/fail-strategies, payload shape
   - `gateway/test_scanner.py` — PIIScanner: AWS keys, private keys, email redaction, block/warn modes
@@ -175,7 +175,7 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `central_service/test_hitl_endpoints.py` — Cloud-persisted HITL bridge endpoints: POST /hitl/approve, GET /hitl/decision, GET /hitl/recover, GET /hitl/recover/pending (14 tests)
 - `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
 
-- Total test suite: **712 unit tests** covering all safety layers and all Phase 3+ features.
+| Total test suite: **757** unit tests covering all safety layers and all Phase 3+ features.
 
 ## 🧪 Testing
 
@@ -185,7 +185,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All **712** tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
+All **757** tests are **unit tests** — they mock all external dependencies (HTTP servers, PostgreSQL, Telegram, Slack, SMTP) using `unittest.mock.AsyncMock` and `MagicMock`. No live services are required.
 
 Test coverage maps directly to the safety pipeline layers:
 

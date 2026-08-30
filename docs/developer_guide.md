@@ -53,7 +53,7 @@ aw-aiguard/
 ├── shared/                           # Shared schemas and utilities
 │   ├── schemas.py                    # AuditEvent, ProvenanceEvent, SettingsChange Pydantic models
 │   └── test_schemas.py               # Schema validation tests
-├── tests/                            # 654 pytest unit tests
+├── tests/                            # 757 pytest unit tests
 │   ├── conftest.py                   # Shared fixtures
 │   ├── red_team/                     # 85 adversarial test cases (Phase 5.1)
 │   ├── gateway/                      # Gateway layer tests
@@ -584,5 +584,5 @@ pytest tests/gateway/test_provenance.py --cov=gateway/core/provenance --cov-repo
 - **Audit trail:** `docs/audit_guide.md`
 - **Security checklist:** `docs/security_checklist.md`
 - **Configuration reference:** `guardrail-config/README.md`
-- **Test suite:** `tests/` (654 tests)
+- **Test suite:** `tests/` (757 tests)
 - **Implementation plan:** `IMPLEMENTATION_PLAN.md`

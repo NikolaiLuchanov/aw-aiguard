@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 aw-aiguard: PostgreSQL audit database layer.
 
@@ -6,10 +8,9 @@ for audit_logs, provenance, and settings_history tables.
 """
 
 import json
-import os
-import sys
 import logging
-from typing import Any, Dict, List, Literal, Optional
+import os
+from typing import Any, Optional
 
 import asyncpg
 
@@ -91,7 +92,7 @@ class AuditDB:
             )
             return row["id"]
 
-    async def batch_insert_audit_logs(self, events: List[AuditEvent]) -> int:
+    async def batch_insert_audit_logs(self, events: list[AuditEvent]) -> int:
         """Insert multiple audit log entries in a single transaction."""
         if not events:
             return 0
@@ -167,7 +168,7 @@ class AuditDB:
     # read helpers
     # ------------------------------------------------------------------ #
 
-    async def get_settings(self, developer_id: str) -> Dict[str, Any]:
+    async def get_settings(self, developer_id: str) -> dict[str, Any]:
         """Return merged settings: defaults + latest overrides from settings_history."""
         result = dict(DEFAULT_SETTINGS)
         async with self.pool.acquire() as conn:
@@ -193,7 +194,7 @@ class AuditDB:
     # Phase 3.1 — Dashboard query layer
     # ------------------------------------------------------------------ #
 
-    async def get_pending_hitl_requests(self) -> List[Dict[str, Any]]:
+    async def get_pending_hitl_requests(self) -> list[dict[str, Any]]:
         """
         Return all pending HITL requests (decision IS NULL) with full context.
         Ordered by created_at DESC. Includes provenance if available.
@@ -226,7 +227,7 @@ class AuditDB:
                 raise ValueError(f"Hitl request {request_id} not found or already decided")
             return row["id"]
 
-    async def get_hitl_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+    async def get_hitl_request(self, request_id: str) -> Optional[dict[str, Any]]:
         """Get a single HITL request by ID. Returns None if not found."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -247,7 +248,7 @@ class AuditDB:
         prompt_snippet: str,
         rule_name: str,
         timeout_at: str,  # ISO format TIMESTAMPTZ
-        provenance: Optional[Dict] = None,
+        provenance: Optional[dict] = None,
     ) -> int:
         """
         Insert a pending HITL approval row.
@@ -268,7 +269,7 @@ class AuditDB:
 
     async def get_pending_hitl_by_api_key(
         self, api_key: str, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Return pending HITL requests for a specific API key.
         Used by gateway restart recovery.
@@ -296,7 +297,7 @@ class AuditDB:
             )
             return row  # 'approved', 'denied', or None
 
-    async def list_byoc_rules(self, active_only: bool = True) -> List[Dict[str, Any]]:
+    async def list_byoc_rules(self, active_only: bool = True) -> list[dict[str, Any]]:
         """List BYOC rules from cloud store."""
         query = """
             SELECT id, name, description, pattern, enforcement, severity,
@@ -354,7 +355,7 @@ class AuditDB:
             )
             return result != "UPDATE 0"
 
-    async def get_settings_overrides(self, developer_id: str) -> Dict[str, str]:
+    async def get_settings_overrides(self, developer_id: str) -> dict[str, str]:
         """Get all per-developer settings overrides as a flat dict."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("""
@@ -399,7 +400,7 @@ class AuditDB:
 
                 return row["id"]
 
-    async def get_settings_audit(self, developer_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_settings_audit(self, developer_id: str, limit: int = 100) -> list[dict[str, Any]]:
         """Get settings change history for a developer."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("""
@@ -448,7 +449,7 @@ class AuditDB:
             """, gateway_id, api_key_hash, version, settings_hash, ip_address)
             return row["id"]
 
-    async def get_online_gateways(self) -> List[Dict[str, Any]]:
+    async def get_online_gateways(self) -> list[dict[str, Any]]:
         """
         List all gateways seen in the last 5 minutes.
         Marks stale gateways as is_online = FALSE.
@@ -471,7 +472,7 @@ class AuditDB:
     async def get_audit_logs(self, limit: int = 50, offset: int = 0,
                              event_type: Optional[str] = None,
                              component: Optional[str] = None,
-                             api_key: Optional[str] = None) -> List[Dict[str, Any]]:
+                             api_key: Optional[str] = None) -> list[dict[str, Any]]:
         """
         Paginated audit log browser. All filters are optional.
         Ordered by created_at DESC.

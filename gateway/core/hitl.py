@@ -1,14 +1,16 @@
-import uuid
-import time
-import re
-import yaml
-import json
-import logging
+from __future__ import annotations
+
 import asyncio
-import httpx
-from datetime import datetime
-from typing import Dict, Optional, Any, List
+import logging
+import re
+import time
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import httpx
+import yaml
 
 from gateway.core.block import BlockReason
 
@@ -50,7 +52,7 @@ class PendingRequest:
     request_context: Optional[RequestContext] = None
     timeout_at: float = 0.0  # NEW: absolute timeout for cloud sync
     prompt_hash: str = ""   # NEW: for DB correlation
-    provenance: Optional[Dict] = None  # NEW: for cloud audit
+    provenance: Optional[dict] = None  # NEW: for cloud audit
 
 class HITLGate:
     """
@@ -63,7 +65,7 @@ class HITLGate:
         self.default_timeout = default_timeout
         self.notification_mode = self._validate_notification_mode(notification_mode)
         self.rules = self._load_rules(rules_path)
-        self.pending_requests: Dict[str, PendingRequest] = {}
+        self.pending_requests: dict[str, PendingRequest] = {}
         self._background_task: Optional[asyncio.Task] = None
         self.cloud_url = cloud_url
         self.api_key = api_key
@@ -80,7 +82,7 @@ class HITLGate:
 
     def _load_rules(self, path: str) -> list:
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 config = yaml.safe_load(f)
                 rules = config.get('rules', [])
                 for rule in rules:
@@ -91,7 +93,7 @@ class HITLGate:
             return []
 
     async def check_hitl(self, prompt: str, request_context: Optional[RequestContext] = None,
-                         prompt_hash: str = "", provenance: Optional[Dict] = None) -> tuple:
+                         prompt_hash: str = "", provenance: Optional[dict] = None) -> tuple:
         """
         Returns (HitlDecision, Optional[str]) where str is the request_id if PAUSED.
         Phase 3.3: Syncs pending requests to cloud on pause.
@@ -121,7 +123,7 @@ class HITLGate:
                 return HitlDecision.PAUSE, request_id
         return HitlDecision.PROCEED, None
 
-    def get_pause_response(self, request_id: str, prompt: str) -> Dict[str, Any]:
+    def get_pause_response(self, request_id: str, prompt: str) -> dict[str, Any]:
         """
         Build the HITL pause response payload based on notification_mode.
         - silent: request_id, status, generic message
@@ -161,7 +163,7 @@ class HITLGate:
             return True
         return False
 
-    def get_status(self, request_id: str) -> Dict[str, Any]:
+    def get_status(self, request_id: str) -> dict[str, Any]:
         req = self.pending_requests.get(request_id)
         if not req:
             return {"error": "Request not found"}
@@ -186,7 +188,7 @@ class HITLGate:
             if r.status == HitlStatus.PENDING
         ]
 
-    def _block_error(self, status: str, request_id: str) -> Dict[str, str]:
+    def _block_error(self, status: str, request_id: str) -> dict[str, str]:
         """Return a standardized block error dict for denied/expired requests."""
         reason = BlockReason.HITL_DENIED if status == HitlStatus.DENIED else BlockReason.HITL_EXPIRED
         error = {
@@ -265,7 +267,7 @@ class HITLGate:
     async def _sync_hitl_to_cloud(self, request_id: str, prompt: str,
                                    rule_name: str, timeout_at: float,
                                    prompt_hash: str,
-                                   provenance: Optional[Dict] = None) -> bool:
+                                   provenance: Optional[dict] = None) -> bool:
         """
         Sync a pending HITL request to the cloud dashboard.
         Non-fatal: returns False on failure, logs warning.
@@ -282,7 +284,7 @@ class HITLGate:
                         "prompt_hash": prompt_hash,
                         "prompt_snippet": prompt[:500],
                         "rule_name": rule_name,
-                        "timeout_at": datetime.fromtimestamp(timeout_at).isoformat(),
+                        "timeout_at": datetime.fromtimestamp(timeout_at, tz=timezone.utc).isoformat(),
                         "provenance": provenance or {},
                     },
                 )

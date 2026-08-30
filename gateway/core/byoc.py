@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 BYOC (Bring Your Own Criteria) Stop-Limits Engine.
 
@@ -16,17 +18,16 @@ Dual-source model (Phase 3.2):
   - Merge precedence: cloud replaces local by name; overrides remove any rule
 """
 
-import re
-import time
-import yaml
 import logging
+import re
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, Optional
 
 import httpx
+import yaml
 
 from gateway.core.guardrail import SafetyDecision
-from gateway.core.block import BlockReason
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,8 @@ class EnforcementLevel:
 class BYOCRule:
     """A single BYOC rule (local or cloud source)."""
     __slots__ = (
-        "name", "description", "pattern", "enforcement", "severity",
-        "compiled", "rate_limit", "window_seconds", "source",
+        "compiled", "description", "enforcement", "name", "pattern",
+        "rate_limit", "severity", "source", "window_seconds",
     )
 
     def __init__(
@@ -105,12 +106,12 @@ class BYOCEngine:
     ):
         self.cloud_url = cloud_url
         self.api_key = api_key
-        self.local_rules: List[BYOCRule] = self._load_rules(rules_path)
-        self.cloud_rules: List[BYOCRule] = []
+        self.local_rules: list[BYOCRule] = self._load_rules(rules_path)
+        self.cloud_rules: list[BYOCRule] = []
         self.disabled_rules: set = set()
-        self._rate_counters: Dict[str, List[float]] = {}
+        self._rate_counters: dict[str, list[float]] = {}
         self._rate_lock = threading.Lock()
-        self._active_rules: List[BYOCRule] = list(self.local_rules)  # Start with local rules
+        self._active_rules: list[BYOCRule] = list(self.local_rules)  # Start with local rules
         self._cloud_version: Optional[str] = None
         self._rules_version: int = 0
         logger.info(f"BYOCEngine initialized with {len(self.local_rules)} local rules.")
@@ -119,9 +120,9 @@ class BYOCEngine:
     # Local YAML loading (unchanged from Phase 1.6)
     # ------------------------------------------------------------------ #
 
-    def _load_rules(self, path: str) -> List[BYOCRule]:
+    def _load_rules(self, path: str) -> list[BYOCRule]:
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 config = yaml.safe_load(f)
             raw_rules = config.get("rules", [])
             loaded = []
@@ -148,7 +149,7 @@ class BYOCEngine:
     # Cloud sync (Phase 3.2 additions)
     # ------------------------------------------------------------------ #
 
-    async def sync_rules_from_cloud(self) -> Dict[str, Any]:
+    async def sync_rules_from_cloud(self) -> dict[str, Any]:
         """
         Fetch cloud BYOC rules from the central service.
         Non-fatal: returns current state on failure.
@@ -208,7 +209,7 @@ class BYOCEngine:
             "version": self._cloud_version,
         }
 
-    async def sync_overrides_from_cloud(self) -> Dict[str, Any]:
+    async def sync_overrides_from_cloud(self) -> dict[str, Any]:
         """
         Fetch per-developer settings overrides and apply BYOC disable flags.
         Overrides use key pattern: byoc_rule_<rule_name>_disabled = true/false.
@@ -244,7 +245,7 @@ class BYOCEngine:
 
         return {"disabled_count": len(self.disabled_rules)}
 
-    async def sync_all_cloud_state(self) -> Dict[str, Any]:
+    async def sync_all_cloud_state(self) -> dict[str, Any]:
         """One-shot full sync: fetch rules + overrides, merge, return summary."""
         rules_summary = await self.sync_rules_from_cloud()
         overrides_summary = await self.sync_overrides_from_cloud()
@@ -261,11 +262,11 @@ class BYOCEngine:
           2. Cloud-only rules are added.
           3. Overrides (disabled_rules set) remove rules from both sources.
         """
-        cloud_lookup: Dict[str, BYOCRule] = {r.name: r for r in self.cloud_rules}
+        cloud_lookup: dict[str, BYOCRule] = {r.name: r for r in self.cloud_rules}
         local_names: set = {r.name for r in self.local_rules}
 
         # Start with local rules
-        active: List[BYOCRule] = list(self.local_rules)
+        active: list[BYOCRule] = list(self.local_rules)
 
         # Replace/add with cloud rules (cloud replaces by name)
         for cloud_rule in self.cloud_rules:
@@ -274,7 +275,7 @@ class BYOCEngine:
             # If same name, cloud already replaces local — handled below
 
         # Build final list with precedence and override filtering
-        final: List[BYOCRule] = []
+        final: list[BYOCRule] = []
         for rule in active:
             if rule.name in cloud_lookup:
                 cloud_rule = cloud_lookup[rule.name]
@@ -358,7 +359,7 @@ class BYOCEngine:
     # Summary / introspection
     # ------------------------------------------------------------------ #
 
-    def get_rules_summary(self) -> List[Dict]:
+    def get_rules_summary(self) -> list[dict]:
         """
         Return a summary of all active rules with source attribution.
         Used by the gateway's /byoc/rules endpoint and the dashboard's
@@ -385,6 +386,6 @@ class BYOCEngine:
         return self._cloud_version
 
     @property
-    def rules(self) -> List[BYOCRule]:
+    def rules(self) -> list[BYOCRule]:
         """Backward compat alias for _active_rules (used by existing tests)."""
         return self._active_rules

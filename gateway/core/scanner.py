@@ -1,7 +1,11 @@
-import re
-import yaml
+from __future__ import annotations
+
 import logging
-from typing import Tuple, List, Dict
+import re
+from typing import ClassVar
+
+import yaml
+
 from gateway.core.guardrail import SafetyDecision
 
 logger = logging.getLogger(__name__)
@@ -12,7 +16,7 @@ class PIIScanner:
     Uses regex-based pattern matching with action-based rules.
     """
     # Mapping from settings.yaml secrets_block_mode → block_mode
-    _BLOCK_MODE_MAP = {
+    _BLOCK_MODE_MAP: ClassVar[dict[str, str]] = {
         "hard_block": "block",
         "soft_block": "warn",
         "disabled": "ignore",
@@ -24,9 +28,9 @@ class PIIScanner:
         self.rules = self._load_rules(rules_path)
         logger.info(f"PIIScanner initialized with {len(self.rules)} rules in {redaction_mode} mode, action={block_mode}.")
 
-    def _load_rules(self, path: str) -> List[Dict]:
+    def _load_rules(self, path: str) -> list[dict]:
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 config = yaml.safe_load(f)
                 rules = config.get('rules', [])
                 for rule in rules:
@@ -36,7 +40,7 @@ class PIIScanner:
             logger.error(f"Failed to load scan rules from {path}: {e}")
             return []
 
-    def scan_text(self, text: str) -> Tuple[str, SafetyDecision]:
+    def scan_text(self, text: str) -> tuple[str, SafetyDecision]:
         if not text:
             return text, SafetyDecision.ALLOW
 

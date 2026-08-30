@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Shared Pydantic schemas for aw-aiguard.
 
@@ -6,7 +8,7 @@ Keeping them in one place prevents silent field divergence.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,10 +20,10 @@ class AuditEvent(BaseModel):
     component: str  # 'guardian', 'pii_scanner', 'hitl_gate', 'byoc_engine', 'proxy'
     reason: Optional[str] = None
     prompt_hash: Optional[str] = None
-    provenance: Optional[Dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
     blocked_by: Optional[str] = None
     request_id: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[dict[str, Any]] = None
 
 
 class ProvenanceEvent(BaseModel):
@@ -117,4 +119,4 @@ class HitlCreateRequest(BaseModel):
     prompt_snippet: str
     rule_name: str
     timeout_at: str  # ISO format TIMESTAMPTZ
-    provenance: Dict[str, Any] = {}
+    provenance: dict[str, Any] = {}
