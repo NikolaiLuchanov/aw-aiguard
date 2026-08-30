@@ -1,10 +1,6 @@
 # aw-aiguard: LLM Security Gateway
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](#)
-[![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-757-passing-brightgreen)](#)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](#) [![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) [![Ruff](https://img.shields.io/badge/lint-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Tests](https://img.shields.io/badge/tests-757-passing-brightgreen)](#)
 
 `aw-aiguard` is a security middleware layer designed to protect LLM agents from prompt injection, data exfiltration, and catastrophic automated actions. It implements a "Security from Architecture" approach by enforcing hard boundaries, human-in-the-loop (HITL) gates, and provenance tracking.
 
