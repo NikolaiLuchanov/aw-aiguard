@@ -1,5 +1,11 @@
 # aw-aiguard: LLM Security Gateway
 
+[![PyPI - Version](https://img.shields.io/badge/version-0.3.0-blue)](https://pypi.org/project/aw-aiguard/)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Ruff](https://img.shields.io/badge/lint-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/badge/tests-757-passing-brightgreen)](tests/)
+
 `aw-aiguard` is a security middleware layer designed to protect LLM agents from prompt injection, data exfiltration, and catastrophic automated actions. It implements a "Security from Architecture" approach by enforcing hard boundaries, human-in-the-loop (HITL) gates, and provenance tracking.
 
 ## 🚀 Quick Start
@@ -31,7 +37,8 @@ This starts PostgreSQL 16, MinIO, and the API server.
 Copy the environment file and configure your LLM provider API key:
 
 ```bash
-# Edit .env with your LLM provider API key and GUARDIAN_URL
+cp .env.example gateway/.env
+# Edit gateway/.env with your LLM provider API key and GUARDIAN_URL
 ```
 
 ### 4. Start the Gateway Proxy
@@ -122,8 +129,8 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
 4. **Function-Calling Hallucination Detection (L3.5)**: Evaluates LLM-proposed tool calls for hallucination via Guardian (Phase 4.1 ✅).
 5. **BYOC Stop-Limits (L3)**: Hard boundaries defined by organizational policy.
 6. **HITL Middleware (L4)**: Mandatory human approval for irreversible actions.
-7. **Thinking-Mode Verification (L6)**: Post-response deep reasoning pass (planned Phase 4.4).
-8. **LLM05 Output Control (L6B)**: Schema validation and escaping (planned Phase 4.3).
+7. **Thinking-Mode Verification (L6)**: Post-response deep reasoning pass (planned Phase 4.4 ⏳).
+8. **LLM05 Output Control (L6B)**: Schema validation and escaping (planned Phase 4.3 ⏳).
 9. **Cloud Alerting**: Real-time notifications to operators via Telegram, Slack, and Email.
 
 ## 🏗️ Project Structure
@@ -173,9 +180,6 @@ Indirect (data-borne) injection — poisoning external sources the agent ingests
   - `central_service/test_hitl_cloud.py` — Cloud HITL bridge: create_hitl_approval, get_pending_hitl_by_api_key, get_hitl_decision, mock pool interactions (12 tests)
   - `central_service/test_dashboard_hitl.py` — Dashboard HITL endpoints: pending list, approve/deny, approval detail
   - `central_service/test_hitl_endpoints.py` — Cloud-persisted HITL bridge endpoints: POST /hitl/approve, GET /hitl/decision, GET /hitl/recover, GET /hitl/recover/pending (14 tests)
-- `pyproject.toml`: pytest configuration (`asyncio_mode=auto`), coverage settings, test markers.
-
-| Total test suite: **757** unit tests covering all safety layers and all Phase 3+ features.
 
 ## 🧪 Testing
 
